@@ -5,6 +5,8 @@ import Home from "../pages/public/Home";
 import About from "../pages/public/About";
 import Contact from "../pages/public/Contact";
 import Login from "../pages/public/Login";
+import TwoFactorVerify from "../pages/public/TwoFactorVerify";
+import VerifyEmailCode from "../pages/public/VerifyEmailCode";
 
 export default function PublicRoutes() {
   return (
@@ -17,6 +19,8 @@ export default function PublicRoutes() {
         <Route path="/blog" element={<div>Blog - Próximamente</div>} />
       </Route>
       <Route path="/login" element={<Login />} />
+      <Route path="/two-factor-verify" element={<TwoFactorVerify />} />
+      <Route path="/verify-email-code" element={<VerifyEmailCode />} />
     </Routes>
   );
 }
