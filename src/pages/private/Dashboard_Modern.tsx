@@ -1,4 +1,4 @@
-// src/pages/private/Dashboard.tsx - VERSIÓN WEB PREMIUM
+// src/pages/private/Dashboard_Modern.tsx
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { 
@@ -6,9 +6,7 @@ import {
   User, 
   ShoppingBag, 
   Heart, 
-  Settings,
   Palette,
-  TrendingUp,
   Sparkles,
   Eye,
   Star,
@@ -18,7 +16,7 @@ import {
   Camera
 } from "lucide-react";
 import { authService } from "../../services/authService";
-import "../../styles/dashboard_modern.css";  // ← Usa el CSS moderno
+import "../../styles/dashboard_modern.css";
 
 export default function Dashboard() {
   const navigate = useNavigate();
