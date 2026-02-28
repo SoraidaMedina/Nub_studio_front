@@ -3,7 +3,7 @@ import { authService } from './authService';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-interface Obra {
+export interface Obra {
   id_obra?: number;
   titulo: string;
   descripcion: string;
@@ -36,18 +36,15 @@ class ObraService {
     };
   }
 
+  // ── OBRAS ──────────────────────────────────────────────────────
+
   async getAllObras(): Promise<ObraResponse> {
     try {
       const response = await fetch(`${API_URL}/api/obras`, {
         headers: this.getHeaders(),
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Error al obtener obras');
-      }
-
+      if (!response.ok) throw new Error(data.message || 'Error al obtener obras');
       return data;
     } catch (error) {
       console.error('Error al obtener obras:', error);
@@ -60,13 +57,8 @@ class ObraService {
       const response = await fetch(`${API_URL}/api/obras/${id}`, {
         headers: this.getHeaders(),
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Error al obtener la obra');
-      }
-
+      if (!response.ok) throw new Error(data.message || 'Error al obtener la obra');
       return data;
     } catch (error) {
       console.error('Error al obtener obra:', error);
@@ -81,13 +73,8 @@ class ObraService {
         headers: this.getHeaders(),
         body: JSON.stringify(obraData),
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Error al crear la obra');
-      }
-
+      if (!response.ok) throw new Error(data.message || 'Error al crear la obra');
       return data;
     } catch (error) {
       console.error('Error al crear obra:', error);
@@ -102,13 +89,8 @@ class ObraService {
         headers: this.getHeaders(),
         body: JSON.stringify(obraData),
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Error al actualizar la obra');
-      }
-
+      if (!response.ok) throw new Error(data.message || 'Error al actualizar la obra');
       return data;
     } catch (error) {
       console.error('Error al actualizar obra:', error);
@@ -122,13 +104,8 @@ class ObraService {
         method: 'DELETE',
         headers: this.getHeaders(),
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Error al eliminar la obra');
-      }
-
+      if (!response.ok) throw new Error(data.message || 'Error al eliminar la obra');
       return data;
     } catch (error) {
       console.error('Error al eliminar obra:', error);
@@ -136,22 +113,29 @@ class ObraService {
     }
   }
 
+  // ── CATÁLOGOS ──────────────────────────────────────────────────
+
   async getCategorias() {
     try {
+      // GET /api/categorias → { success, data: [...] }
       const response = await fetch(`${API_URL}/api/categorias`);
       const data = await response.json();
-      return data;
+      return { categorias: data.data || [] };
     } catch (error) {
       console.error('Error al obtener categorías:', error);
       throw error;
     }
   }
 
-  async getTecnicas() {
+  async getTecnicas(id_categoria?: number) {
     try {
-      const response = await fetch(`${API_URL}/api/etiquetas/tecnicas`);
+      // GET /api/tecnicas  o  /api/tecnicas?categoria=X
+      const url = id_categoria
+        ? `${API_URL}/api/tecnicas?categoria=${id_categoria}`
+        : `${API_URL}/api/tecnicas`;
+      const response = await fetch(url);
       const data = await response.json();
-      return data;
+      return { tecnicas: data.data || data.tecnicas || [] };
     } catch (error) {
       console.error('Error al obtener técnicas:', error);
       throw error;
@@ -160,11 +144,12 @@ class ObraService {
 
   async getArtistas() {
     try {
+      // GET /api/artistas → { success, data: [...] }
       const response = await fetch(`${API_URL}/api/artistas`, {
         headers: this.getHeaders(),
       });
       const data = await response.json();
-      return data;
+      return { artistas: data.data || data.artistas || [] };
     } catch (error) {
       console.error('Error al obtener artistas:', error);
       throw error;
@@ -173,4 +158,4 @@ class ObraService {
 }
 
 export const obraService = new ObraService();
-export type { Obra, ObraResponse };
+export type { ObraResponse };

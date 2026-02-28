@@ -2,10 +2,15 @@
 import { useState, useEffect } from "react";
 import type { FormEvent, ChangeEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Mail, ArrowLeft, Loader2, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
+import { Mail, ArrowLeft, Loader2, AlertCircle, CheckCircle2, ShieldCheck } from "lucide-react";
 import { authService } from "../../services/authService";
 import logoImg from "../../assets/images/logo.png";
-import "../../styles/login.css";
+
+const C = {
+  orange: "#FF840E", pink: "#CC59AD", purple: "#8D4CCD",
+  gold: "#FFC110", bg: "#0f0c1a",
+  text: "#ffffff", muted: "rgba(255,255,255,0.5)",
+};
 
 export default function VerifyEmailCode() {
   const navigate = useNavigate();
@@ -15,17 +20,18 @@ export default function VerifyEmailCode() {
   const [mensaje, setMensaje] = useState("");
   const [isError, setIsError] = useState(false);
 
-  const correo = location.state?.correo || localStorage.getItem('temp_correo_2fa');
+  const correo = location.state?.correo
+    || localStorage.getItem('temp_correo_verificacion')
+    || localStorage.getItem('temp_correo_2fa');
 
   useEffect(() => {
-    if (!correo) {
-      navigate('/login');
-    }
+    if (!correo) navigate('/login');
   }, [correo, navigate]);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, '').slice(0, 6);
     setCodigo(value);
+    setMensaje("");
   };
 
   const showMessage = (msg: string, error: boolean) => {
@@ -45,162 +51,220 @@ export default function VerifyEmailCode() {
     setIsLoading(true);
 
     try {
-      const response = await authService.verifyGmail2FA(correo!, codigo);
-
-      const token = response.access_token || response.token;
-      if (token) {
-        localStorage.setItem('access_token', token);
-        localStorage.setItem('token', token);
-      }
-
-      if (response.usuario) {
-        localStorage.setItem('userEmail', response.usuario.correo);
-        localStorage.setItem('userName', response.usuario.nombre);
-        localStorage.setItem('userId', response.usuario.id.toString());
-      }
-
-      localStorage.setItem('isLoggedIn', 'true');
-      localStorage.removeItem('temp_correo_2fa');
-
-      showMessage('Verificación exitosa ✓', false);
-
+      await authService.verifyEmail(correo!, codigo);
+      showMessage("¡Cuenta verificada! Redirigiendo al login... ✓", false);
       setTimeout(() => {
-        navigate('/dashboard');
-      }, 1000);
-
+        localStorage.removeItem('temp_correo_verificacion');
+        localStorage.removeItem('temp_correo_2fa');
+        navigate('/login');
+      }, 2000);
     } catch (err: any) {
-      console.error('❌ Error en verificación Gmail 2FA:', err);
-
       if (err.status === 401) {
-        showMessage('Código incorrecto. Intenta de nuevo.', true);
+        showMessage("Código incorrecto. Intenta de nuevo.", true);
       } else if (err.status === 404) {
-        showMessage('Código no encontrado o expirado.', true);
+        showMessage("Código no encontrado o expirado.", true);
       } else {
-        showMessage(err.error?.message || 'Error al verificar el código', true);
+        showMessage(err.error?.message || "Error al verificar el código", true);
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const goBack = () => {
-    localStorage.removeItem('temp_correo_2fa');
-    navigate('/login');
+  const handleReenviar = async () => {
+    try {
+      showMessage("Reenviando código...", false);
+      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}/api/auth/resend-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ correo }),
+      });
+      showMessage("Código reenviado. Revisa tu correo 📧", false);
+    } catch {
+      showMessage("Error al reenviar el código", true);
+    }
   };
 
   return (
-    <div className="login-container">
-      <div className="login-banner">
-        <div className="banner-content">
-          <div className="banner-logo">
-            <img src={logoImg} alt="NU-B Studio Logo" className="banner-logo-image" />
-          </div>
-          <h1 className="banner-title">Verificación por Email</h1>
-          <p className="banner-subtitle">Revisa tu correo electrónico</p>
-          <div className="banner-features">
-            <div className="feature-item">
-              <div className="feature-icon">
-                <Mail size={28} />
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Outfit', sans-serif", display: "flex", position: "relative", overflow: "hidden" }}>
+
+      {/* Orbs */}
+      <div style={{ position: "fixed", top: -120, left: -120, width: 450, height: 450, borderRadius: "50%", background: `radial-gradient(circle, ${C.pink}20, transparent 70%)`, pointerEvents: "none" }} />
+      <div style={{ position: "fixed", bottom: -120, right: -120, width: 550, height: 550, borderRadius: "50%", background: `radial-gradient(circle, ${C.purple}18, transparent 70%)`, pointerEvents: "none" }} />
+      <div style={{ position: "fixed", top: "40%", left: "30%", width: 300, height: 300, borderRadius: "50%", background: `radial-gradient(circle, ${C.orange}10, transparent 70%)`, pointerEvents: "none" }} />
+
+      {/* Botón volver */}
+      <button
+        onClick={() => navigate('/login')}
+        style={{
+          position: "fixed", top: 20, left: 20, zIndex: 100,
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "10px 18px", borderRadius: 100,
+          background: "rgba(15,12,26,0.85)", backdropFilter: "blur(16px)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 600,
+          cursor: "pointer", fontFamily: "'Outfit', sans-serif",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.3)", transition: "all .22s ease",
+        }}
+        onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.background = "rgba(255,132,14,0.15)"; el.style.borderColor = `${C.orange}50`; el.style.color = C.orange; }}
+        onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.background = "rgba(15,12,26,0.85)"; el.style.borderColor = "rgba(255,255,255,0.12)"; el.style.color = "rgba(255,255,255,0.7)"; }}
+      >
+        <ArrowLeft size={14} strokeWidth={2.5} />
+        Volver al login
+      </button>
+
+      {/* Panel izquierdo */}
+      <div className="verify-banner" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 40px" }}>
+        <div style={{ maxWidth: 400 }}>
+          <img src={logoImg} alt="Nu-B Studio" style={{ height: 52, marginBottom: 28 }} />
+          <h1 style={{ fontSize: 38, fontWeight: 900, color: C.text, lineHeight: 1.1, margin: "0 0 16px" }}>
+            Casi listo,<br />
+            <span style={{ background: `linear-gradient(135deg, ${C.orange}, ${C.pink})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              verifica tu cuenta
+            </span>
+          </h1>
+          <p style={{ fontSize: 15, color: C.muted, lineHeight: 1.7, margin: "0 0 40px" }}>
+            Te enviamos un código de 6 dígitos a tu correo. Ingrésalo para activar tu cuenta y comenzar a explorar.
+          </p>
+
+          {[
+            { icon: <Mail size={18} color={C.orange} />, title: "Revisa tu bandeja de entrada", desc: "El código llega en menos de un minuto" },
+            { icon: <ShieldCheck size={18} color={C.pink} />, title: "Código de un solo uso", desc: "Expira en 24 horas por seguridad" },
+            { icon: <CheckCircle2 size={18} color={C.gold} />, title: "Una vez verificado", desc: "Podrás acceder a toda la galería" },
+          ].map(({ icon, title, desc }) => (
+            <div key={title} style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 20 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                {icon}
               </div>
-              <span className="feature-text">Código enviado a tu correo</span>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 2 }}>{title}</div>
+                <div style={{ fontSize: 12.5, color: C.muted }}>{desc}</div>
+              </div>
             </div>
-          </div>
+          ))}
         </div>
       </div>
 
-      <div className="login-form-section">
-        <div className="login-card">
-          <div className="mobile-logo">
-            <img src={logoImg} alt="Logo" className="mobile-logo-image" />
+      {/* Panel derecho */}
+      <div className="verify-form-panel" style={{ width: 480, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 32px" }}>
+        <div style={{ width: "100%", maxWidth: 420 }}>
+
+          {/* Logo mobile */}
+          <div className="verify-mobile-logo" style={{ display: "none", justifyContent: "center", marginBottom: 28 }}>
+            <img src={logoImg} alt="Nu-B Studio" style={{ height: 44 }} />
           </div>
 
-          <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-            <Mail size={48} style={{ color: '#FF6B35', margin: '0 auto' }} />
-          </div>
+          {/* Card */}
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20, padding: "36px 32px", backdropFilter: "blur(20px)" }}>
 
-          <h2 className="login-title">Verifica tu email</h2>
-          <p className="login-subtitle">
-            Hemos enviado un código de 6 dígitos a<br />
-            <strong>{correo}</strong>
-          </p>
-
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="codigo">Código de verificación</label>
-              <input
-                type="text"
-                id="codigo"
-                name="codigo"
-                value={codigo}
-                onChange={handleChange}
-                placeholder="000000"
-                disabled={isLoading}
-                maxLength={6}
-                pattern="[0-9]{6}"
-                required
-                style={{ 
-                  fontSize: '24px', 
-                  letterSpacing: '8px',
-                  textAlign: 'center',
-                  fontWeight: 'bold'
-                }}
-              />
+            {/* Icono central */}
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+              <div style={{ width: 64, height: 64, borderRadius: "50%", background: `linear-gradient(135deg, ${C.orange}20, ${C.pink}20)`, border: `1.5px solid ${C.orange}40`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Mail size={28} color={C.orange} />
+              </div>
             </div>
 
-            {mensaje && isError && (
-              <div className="error-message">
-                <AlertCircle size={20} className="message-icon" />
-                {mensaje}
-              </div>
-            )}
+            <h2 style={{ fontSize: 24, fontWeight: 800, color: C.text, margin: "0 0 4px", textAlign: "center" }}>Verifica tu email</h2>
+            <p style={{ fontSize: 13, color: C.muted, margin: "0 0 28px", textAlign: "center", lineHeight: 1.6 }}>
+              Ingresa el código de 6 dígitos enviado a<br />
+              <span style={{ color: C.orange, fontWeight: 600 }}>{correo}</span>
+            </p>
 
-            {mensaje && !isError && (
-              <div className="success-message">
-                <CheckCircle2 size={20} className="message-icon" />
-                {mensaje}
-              </div>
-            )}
+            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
-            <button type="submit" className="btn-login" disabled={isLoading}>
-              {isLoading ? (
-                <span className="loading-spinner">
-                  <Loader2 size={20} className="spinner-icon" />
-                  Verificando...
-                </span>
-              ) : (
-                <span className="btn-content">
-                  <Mail size={20} />
-                  Verificar código
-                </span>
+              {/* Input código */}
+              <div>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.75)", marginBottom: 8 }}>
+                  <Mail size={14} /> Código de verificación
+                </label>
+                <input
+                  type="text"
+                  value={codigo}
+                  onChange={handleChange}
+                  placeholder="000000"
+                  disabled={isLoading}
+                  maxLength={6}
+                  required
+                  style={{
+                    width: "100%", boxSizing: "border-box",
+                    padding: "14px", borderRadius: 10,
+                    border: `1.5px solid ${codigo.length === 6 ? C.orange : "rgba(255,255,255,0.1)"}`,
+                    background: "rgba(255,255,255,0.05)",
+                    color: "#ffffff", fontSize: 28,
+                    fontFamily: "'Outfit', sans-serif",
+                    outline: "none", textAlign: "center",
+                    letterSpacing: "12px", fontWeight: 700,
+                    transition: "border .15s",
+                  }}
+                />
+                {/* Indicador de dígitos */}
+                <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 8 }}>
+                  {[0,1,2,3,4,5].map(i => (
+                    <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: i < codigo.length ? C.orange : "rgba(255,255,255,0.15)", transition: "background .15s" }} />
+                  ))}
+                </div>
+              </div>
+
+              {/* Mensaje */}
+              {mensaje && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 10, fontSize: 13, background: isError ? "rgba(204,89,173,0.12)" : "rgba(74,222,128,0.12)", border: `1px solid ${isError ? C.pink : "#4ADE80"}`, color: isError ? C.pink : "#4ADE80" }}>
+                  {isError ? <AlertCircle size={14} /> : <CheckCircle2 size={14} />}
+                  {mensaje}
+                </div>
               )}
-            </button>
-          </form>
 
-          <div className="divider">
-            <span>o</span>
-          </div>
+              {/* Botón verificar */}
+              <button
+                type="submit"
+                disabled={isLoading || codigo.length !== 6}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  width: "100%", padding: "13px 20px", borderRadius: 12,
+                  background: codigo.length === 6 ? `linear-gradient(135deg, ${C.orange}, ${C.pink})` : "rgba(255,255,255,0.06)",
+                  border: "none", color: codigo.length === 6 ? "white" : "rgba(255,255,255,0.3)",
+                  fontSize: 15, fontWeight: 700, cursor: isLoading || codigo.length !== 6 ? "not-allowed" : "pointer",
+                  fontFamily: "'Outfit', sans-serif",
+                  boxShadow: codigo.length === 6 ? "0 8px 24px rgba(255,132,14,0.3)" : "none",
+                  transition: "all .2s",
+                }}
+              >
+                {isLoading
+                  ? <><Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> Verificando...</>
+                  : <><ShieldCheck size={16} /> Verificar cuenta</>
+                }
+              </button>
+            </form>
 
-          <p className="register-link" style={{ textAlign: 'center', fontSize: '14px', color: '#666' }}>
-            ¿No recibiste el código?{" "}
-            <a onClick={() => showMessage('Función de reenvío próximamente', false)} style={{ cursor: 'pointer' }}>
-              Reenviar código
-            </a>
-          </p>
+            {/* Divider */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "22px 0" }}>
+              <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+              <span style={{ fontSize: 12, color: C.muted }}>o</span>
+              <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+            </div>
 
-          <div className="forgot-link-container">
-            <button onClick={goBack} className="forgot-link" style={{ border: 'none', background: 'none', cursor: 'pointer' }}>
-              <ArrowLeft size={16} style={{ marginRight: '8px' }} />
-              Volver al login
-            </button>
-          </div>
-
-          <div className="login-footer">
-            <p className="copyright">
-              © {new Date().getFullYear()} NU-B Studio. Todos los derechos reservados.
+            <p style={{ fontSize: 13, color: C.muted, textAlign: "center", margin: 0 }}>
+              ¿No recibiste el código?{" "}
+              <span onClick={handleReenviar} style={{ color: C.orange, cursor: "pointer", fontWeight: 600 }}>
+                Reenviar código
+              </span>
             </p>
           </div>
+
+          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", textAlign: "center", marginTop: 16 }}>
+            © {new Date().getFullYear()} Altar Studio. Todos los derechos reservados.
+          </p>
         </div>
       </div>
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap');
+        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        @media (max-width: 768px) {
+          .verify-banner { display: none !important; }
+          .verify-form-panel { width: 100% !important; padding: 32px 20px !important; }
+          .verify-mobile-logo { display: flex !important; }
+        }
+      `}</style>
     </div>
   );
 }

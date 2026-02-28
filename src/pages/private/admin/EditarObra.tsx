@@ -1,6 +1,6 @@
-// src/pages/private/admin/CrearObra.tsx
+// src/pages/private/admin/EditarObra.tsx
 import { useState, useEffect, FormEvent, ChangeEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, Save, Image as ImageIcon, AlertCircle,
   CheckCircle2, Loader2, Palette, Users, Tag,
@@ -8,11 +8,10 @@ import {
   Link as LinkIcon, Type, FileText,
   LayoutDashboard, ShoppingBag, BarChart2, Settings, LogOut
 } from "lucide-react";
-import { obraService } from "../../../services/obraService";
-import type { Obra } from "../../../services/obraService";
 import { authService } from "../../../services/authService";
+import { obraService } from "../../../services/obraService";
 
-// ── Design tokens (dark, unified with Login/Contact/Dashboard) ──
+// ── Design tokens ─────────────────────────────────────────────
 const C = {
   orange:  "#FF840E",
   pink:    "#CC59AD",
@@ -29,6 +28,8 @@ const C = {
   inputBorder: "rgba(255,255,255,0.1)",
 };
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+
 const NAV = [
   { id:"dashboard", label:"Dashboard", icon:LayoutDashboard, color:C.orange, path:"/admin"          },
   { id:"obras",     label:"Obras",     icon:Palette,         color:C.blue,   path:"/admin/obras"    },
@@ -37,11 +38,18 @@ const NAV = [
   { id:"reportes",  label:"Reportes",  icon:BarChart2,       color:C.muted,  path:"/admin"          },
 ];
 
+const ESTADOS_OPTS = [
+  { val:"pendiente", label:"Pendiente", color:C.gold   },
+  { val:"publicada", label:"Publicada", color:C.orange },
+  { val:"rechazada", label:"Rechazada", color:C.pink   },
+  { val:"agotada",   label:"Agotada",   color:C.muted  },
+];
+
 interface Categoria { id_categoria: number; nombre: string; }
 interface Tecnica    { id_tecnica:   number; nombre: string; }
 interface Artista    { id_artista:   number; nombre_completo: string; nombre_artistico?: string; }
 
-// ── Sidebar (same as AdminDashboard) ────────────────────────────
+// ── Sidebar ───────────────────────────────────────────────────
 function Sidebar({ navigate }: { navigate: any }) {
   const active   = "obras";
   const userName = authService.getUserName?.() || "A";
@@ -55,15 +63,9 @@ function Sidebar({ navigate }: { navigate: any }) {
       display: "flex", flexDirection: "column",
       position: "sticky", top: 0, height: "100vh", flexShrink: 0, zIndex: 40,
     }}>
-      {/* Logo */}
       <div style={{ padding: "24px 20px 20px", borderBottom: `1px solid ${C.border}` }}>
         <div onClick={() => navigate("/")} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-            background: `linear-gradient(135deg, ${C.orange}, ${C.pink})`,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: `0 4px 14px ${C.orange}40`,
-          }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: `linear-gradient(135deg, ${C.orange}, ${C.pink})`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 14px ${C.orange}40` }}>
             <Palette size={18} color="white" strokeWidth={2} />
           </div>
           <div>
@@ -73,11 +75,8 @@ function Sidebar({ navigate }: { navigate: any }) {
         </div>
       </div>
 
-      {/* Nav */}
       <div style={{ flex: 1, padding: "12px 10px", display: "flex", flexDirection: "column", gap: 2 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", padding: "4px 10px 10px" }}>
-          Navegación
-        </div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", padding: "4px 10px 10px" }}>Navegación</div>
         {NAV.map(({ id, label, icon: Icon, color, path }) => {
           const on = active === id;
           return (
@@ -93,17 +92,16 @@ function Sidebar({ navigate }: { navigate: any }) {
               onMouseLeave={e => { if (!on) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
             >
               {on && <div style={{ position: "absolute", left: 0, top: "20%", bottom: "20%", width: 3, borderRadius: "0 3px 3px 0", background: `linear-gradient(180deg, ${color}, ${color}80)` }} />}
-              <div style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0, background: on ? `${color}20` : "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", justifyContent: "center", transition: "background .15s" }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0, background: on ? `${color}20` : "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Icon size={16} color={on ? color : "rgba(255,255,255,0.35)"} strokeWidth={on ? 2.2 : 1.8} />
               </div>
-              <span style={{ fontSize: 13.5, fontWeight: on ? 700 : 500, color: on ? C.text : "rgba(255,255,255,0.45)", transition: "color .15s" }}>{label}</span>
+              <span style={{ fontSize: 13.5, fontWeight: on ? 700 : 500, color: on ? C.text : "rgba(255,255,255,0.45)" }}>{label}</span>
               {on && <div style={{ marginLeft: "auto", width: 6, height: 6, borderRadius: "50%", background: color }} />}
             </button>
           );
         })}
       </div>
 
-      {/* Bottom user */}
       <div style={{ padding: "12px 10px 20px", borderTop: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10 }}>
           <div style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0, background: `linear-gradient(135deg, ${C.pink}, ${C.purple})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, color: "white" }}>
@@ -129,7 +127,7 @@ function Sidebar({ navigate }: { navigate: any }) {
   );
 }
 
-// ── Input style ──────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────
 function inputStyle(focused: boolean, disabled: boolean): React.CSSProperties {
   return {
     width: "100%", padding: "11px 14px", boxSizing: "border-box",
@@ -142,7 +140,6 @@ function inputStyle(focused: boolean, disabled: boolean): React.CSSProperties {
   };
 }
 
-// ── Field label ──────────────────────────────────────────────────
 function FieldLabel({ children, req }: { children: React.ReactNode; req?: boolean }) {
   return (
     <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.6)", marginBottom: 8, display: "flex", alignItems: "center", gap: 5, textTransform: "uppercase", letterSpacing: "0.06em" }}>
@@ -152,21 +149,14 @@ function FieldLabel({ children, req }: { children: React.ReactNode; req?: boolea
   );
 }
 
-// ── Section card ─────────────────────────────────────────────────
 function SectionCard({ title, icon: Icon, accent, children }: { title: string; icon: any; accent: string; children: React.ReactNode }) {
   return (
     <div style={{
-      background: C.surface,
-      border: `1px solid ${C.border}`,
-      borderRadius: 18,
-      overflow: "hidden",
-      marginBottom: 16,
-      backdropFilter: "blur(20px)",
-      position: "relative",
+      background: C.surface, border: `1px solid ${C.border}`,
+      borderRadius: 18, overflow: "hidden", marginBottom: 16,
+      backdropFilter: "blur(20px)", position: "relative",
     }}>
-      {/* Subtle top accent line */}
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${accent}, transparent)` }} />
-
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px", borderBottom: `1px solid ${C.border}` }}>
         <div style={{ width: 30, height: 30, borderRadius: 8, background: `${accent}18`, border: `1px solid ${accent}30`, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Icon size={14} color={accent} strokeWidth={2.2} />
@@ -174,13 +164,11 @@ function SectionCard({ title, icon: Icon, accent, children }: { title: string; i
         <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{title}</span>
         <div style={{ height: 1, flex: 1, background: `linear-gradient(90deg, ${accent}20, transparent)` }} />
       </div>
-
       <div style={{ padding: "20px" }}>{children}</div>
     </div>
   );
 }
 
-// ── Toggle checkbox ──────────────────────────────────────────────
 function Toggle({ label, name, checked, onChange, disabled, icon: Icon, accent }: any) {
   return (
     <label style={{
@@ -190,13 +178,7 @@ function Toggle({ label, name, checked, onChange, disabled, icon: Icon, accent }
       background: checked ? `${accent}10` : "rgba(255,255,255,0.02)",
       transition: "all .15s", userSelect: "none",
     }}>
-      <div style={{
-        width: 18, height: 18, borderRadius: 5, flexShrink: 0,
-        border: `2px solid ${checked ? accent : "rgba(255,255,255,0.2)"}`,
-        background: checked ? accent : "transparent",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        transition: "all .15s",
-      }}>
+      <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, border: `2px solid ${checked ? accent : "rgba(255,255,255,0.2)"}`, background: checked ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s" }}>
         {checked && <CheckCircle2 size={11} color="white" strokeWidth={3} />}
       </div>
       <input type="checkbox" name={name} checked={checked} onChange={onChange} disabled={disabled} style={{ display: "none" }} />
@@ -206,40 +188,74 @@ function Toggle({ label, name, checked, onChange, disabled, icon: Icon, accent }
   );
 }
 
-// ── Main component ───────────────────────────────────────────────
-export default function CrearObra() {
-  const navigate  = useNavigate();
-  const [loading, setLoading] = useState(false);
-  const [mensaje, setMensaje] = useState("");
-  const [isError, setIsError] = useState(false);
-  const [focused, setFocused] = useState<string | null>(null);
+// ── Main component ────────────────────────────────────────────
+export default function EditarObra() {
+  const navigate      = useNavigate();
+  const { id }        = useParams<{ id: string }>();
+
+  const [loading,     setLoading]     = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
+  const [mensaje,     setMensaje]     = useState("");
+  const [isError,     setIsError]     = useState(false);
+  const [focused,     setFocused]     = useState<string | null>(null);
 
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [tecnicas,   setTecnicas]   = useState<Tecnica[]>([]);
   const [artistas,   setArtistas]   = useState<Artista[]>([]);
 
-  const [formData, setFormData] = useState<Obra>({
-    titulo: "", descripcion: "", id_categoria: 0, id_tecnica: undefined, id_artista: 0,
-    precio_base: 0, anio_creacion: new Date().getFullYear(),
-    dimensiones_alto: undefined, dimensiones_ancho: undefined, dimensiones_profundidad: undefined,
-    permite_marco: true, con_certificado: false, imagen_principal: "",
+  const [formData, setFormData] = useState({
+    titulo: "", descripcion: "", id_categoria: 0, id_tecnica: 0,
+    id_artista: 0, precio_base: 0, anio_creacion: new Date().getFullYear(),
+    dimensiones_alto: "", dimensiones_ancho: "", dimensiones_profundidad: "",
+    permite_marco: true, con_certificado: false, imagen_principal: "", estado: "pendiente",
   });
 
   useEffect(() => {
     (async () => {
       try {
-        const [cR, tR, aR] = await Promise.all([obraService.getCategorias(), obraService.getTecnicas(), obraService.getArtistas()]);
+        const [cR, tR, aR] = await Promise.all([
+          obraService.getCategorias(),
+          obraService.getTecnicas(),
+          obraService.getArtistas(),
+        ]);
         setCategorias(cR.categorias || []);
         setTecnicas(tR.tecnicas || []);
         setArtistas(aR.artistas || []);
-      } catch { flash("Error al cargar datos", true); }
+
+        const res  = await fetch(`${API_URL}/api/obras/${id}`, {
+          headers: { Authorization: `Bearer ${authService.getToken()}` },
+        });
+        const json = await res.json();
+        if (json.success && json.data) {
+          const o = json.data;
+          setFormData({
+            titulo:                  o.titulo || "",
+            descripcion:             o.descripcion || "",
+            id_categoria:            o.id_categoria || 0,
+            id_tecnica:              o.id_tecnica || 0,
+            id_artista:              o.id_artista || 0,
+            precio_base:             o.precio_base || 0,
+            anio_creacion:           o.anio_creacion || new Date().getFullYear(),
+            dimensiones_alto:        o.dimensiones_alto || "",
+            dimensiones_ancho:       o.dimensiones_ancho || "",
+            dimensiones_profundidad: o.dimensiones_profundidad || "",
+            permite_marco:           o.permite_marco ?? true,
+            con_certificado:         o.con_certificado ?? false,
+            imagen_principal:        o.imagen_principal || "",
+            estado:                  o.estado || "pendiente",
+          });
+        } else {
+          flash("No se encontró la obra", true);
+        }
+      } catch { flash("Error al cargar los datos", true); }
+      finally { setLoadingData(false); }
     })();
-  }, []);
+  }, [id]);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     if (type === "checkbox") setFormData(p => ({ ...p, [name]: (e.target as HTMLInputElement).checked }));
-    else if (type === "number") setFormData(p => ({ ...p, [name]: value === "" ? undefined : Number(value) }));
+    else if (type === "number") setFormData(p => ({ ...p, [name]: value === "" ? "" : Number(value) } as any));
     else setFormData(p => ({ ...p, [name]: value }));
   };
 
@@ -253,14 +269,19 @@ export default function CrearObra() {
     if (!formData.titulo || !formData.descripcion) return flash("Completa título y descripción", true);
     if (!formData.id_categoria) return flash("Selecciona una categoría", true);
     if (!formData.id_artista)   return flash("Selecciona un artista", true);
-    if (!formData.precio_base || formData.precio_base <= 0) return flash("El precio debe ser mayor a 0", true);
     setLoading(true);
     try {
-      await obraService.createObra(formData);
-      flash("¡Obra creada exitosamente!", false);
-      setTimeout(() => navigate("/admin/obras"), 2000);
+      const res  = await fetch(`${API_URL}/api/obras/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${authService.getToken()}` },
+        body: JSON.stringify(formData),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || "Error al actualizar");
+      flash("¡Obra actualizada exitosamente!", false);
+      setTimeout(() => navigate("/admin/obras"), 1500);
     } catch (err: any) {
-      flash(err.message || "Error al crear la obra", true);
+      flash(err.message || "Error al actualizar la obra", true);
     } finally { setLoading(false); }
   };
 
@@ -271,13 +292,24 @@ export default function CrearObra() {
 
   const currentArtist = artistas.find(a => a.id_artista === Number(formData.id_artista));
   const currentCat    = categorias.find(c => c.id_categoria === Number(formData.id_categoria));
+  const currentEstado = ESTADOS_OPTS.find(e => e.val === formData.estado);
+
+  // ── Loading screen ────────────────────────────────────────
+  if (loadingData) return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: C.bg, fontFamily: "'Outfit',sans-serif", gap: 12, color: C.muted }}>
+      <Loader2 size={22} style={{ animation: "spin 1s linear infinite", color: C.orange }} />
+      <span style={{ fontSize: 14 }}>Cargando obra…</span>
+      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: C.bg, fontFamily: "'Outfit', sans-serif", color: C.text, position: "relative" }}>
+    <div style={{ display: "flex", minHeight: "100vh", background: C.bg, fontFamily: "'Outfit',sans-serif", color: C.text, position: "relative" }}>
 
       {/* Background orbs */}
       <div style={{ position: "fixed", top: -120, right: -120, width: 500, height: 500, borderRadius: "50%", background: `radial-gradient(circle, ${C.pink}12, transparent 70%)`, pointerEvents: "none", zIndex: 0 }} />
       <div style={{ position: "fixed", bottom: -100, left: 200, width: 500, height: 500, borderRadius: "50%", background: `radial-gradient(circle, ${C.purple}10, transparent 70%)`, pointerEvents: "none", zIndex: 0 }} />
+      <div style={{ position: "fixed", top: "40%", right: "25%", width: 350, height: 350, borderRadius: "50%", background: `radial-gradient(circle, ${C.orange}06, transparent 70%)`, pointerEvents: "none", zIndex: 0 }} />
 
       <Sidebar navigate={navigate} />
 
@@ -293,15 +325,8 @@ export default function CrearObra() {
           position: "sticky", top: 0, zIndex: 30,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <button
-              onClick={() => navigate("/admin/obras")}
-              style={{
-                display: "flex", alignItems: "center", gap: 6,
-                background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`,
-                borderRadius: 9, padding: "8px 14px",
-                cursor: "pointer", color: C.muted, fontSize: 13, fontWeight: 500,
-                fontFamily: "'Outfit',sans-serif", transition: "all .15s",
-              }}
+            <button onClick={() => navigate("/admin/obras")}
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, borderRadius: 9, padding: "8px 14px", cursor: "pointer", color: C.muted, fontSize: 13, fontWeight: 500, fontFamily: "'Outfit',sans-serif", transition: "all .15s" }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = `${C.orange}50`; (e.currentTarget as HTMLElement).style.color = C.orange; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = C.border; (e.currentTarget as HTMLElement).style.color = C.muted; }}
             >
@@ -309,45 +334,34 @@ export default function CrearObra() {
             </button>
             <div style={{ width: 1, height: 22, background: C.border }} />
             <div>
-              <div style={{ fontSize: 17, fontWeight: 900, color: C.text, lineHeight: 1 }}>Nueva Obra</div>
-              <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Agrega una pieza al catálogo</div>
+              <div style={{ fontSize: 17, fontWeight: 900, color: C.text, lineHeight: 1 }}>Editar Obra</div>
+              <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
+                ID <span style={{ color: C.orange, fontWeight: 700 }}>#{id}</span>
+                {currentEstado && (
+                  <span style={{ marginLeft: 10, padding: "2px 9px", borderRadius: 20, background: `${currentEstado.color}18`, border: `1px solid ${currentEstado.color}30`, color: currentEstado.color, fontSize: 11, fontWeight: 700 }}>
+                    {currentEstado.label}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <button
-              onClick={() => navigate("/admin/obras")}
-              disabled={loading}
-              style={{
-                padding: "9px 18px", borderRadius: 9,
-                border: `1px solid ${C.border}`,
-                background: "transparent", color: C.muted,
-                fontSize: 13, fontWeight: 600, cursor: "pointer",
-                fontFamily: "'Outfit',sans-serif", transition: "all .15s",
-              }}
+            <button onClick={() => navigate("/admin/obras")} disabled={loading}
+              style={{ padding: "9px 18px", borderRadius: 9, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif", transition: "all .15s" }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.2)"; (e.currentTarget as HTMLElement).style.color = C.text; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = C.border; (e.currentTarget as HTMLElement).style.color = C.muted; }}
             >
               Cancelar
             </button>
-            <button
-              form="obra-form" type="submit" disabled={loading}
-              style={{
-                display: "flex", alignItems: "center", gap: 7,
-                padding: "9px 20px", borderRadius: 9, border: "none",
-                background: loading ? "rgba(255,132,14,0.4)" : `linear-gradient(135deg, ${C.orange}, ${C.pink})`,
-                color: "white", fontSize: 13, fontWeight: 700,
-                cursor: loading ? "not-allowed" : "pointer",
-                fontFamily: "'Outfit',sans-serif",
-                boxShadow: loading ? "none" : `0 6px 20px ${C.orange}35`,
-                transition: "transform .15s, box-shadow .15s",
-              }}
+            <button form="editar-form" type="submit" disabled={loading}
+              style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 20px", borderRadius: 9, border: "none", background: loading ? "rgba(255,132,14,0.4)" : `linear-gradient(135deg, ${C.orange}, ${C.pink})`, color: "white", fontSize: 13, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", fontFamily: "'Outfit',sans-serif", boxShadow: loading ? "none" : `0 6px 20px ${C.orange}35`, transition: "transform .15s, box-shadow .15s" }}
               onMouseEnter={e => { if (!loading) { (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLElement).style.boxShadow = `0 10px 28px ${C.orange}50`; } }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLElement).style.boxShadow = loading ? "none" : `0 6px 20px ${C.orange}35`; }}
             >
               {loading
                 ? <><Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> Guardando…</>
-                : <><Save size={15} strokeWidth={2.5} /> Guardar Obra</>
+                : <><Save size={15} strokeWidth={2.5} /> Guardar Cambios</>
               }
             </button>
           </div>
@@ -358,43 +372,26 @@ export default function CrearObra() {
 
           {/* Alert */}
           {mensaje && (
-            <div style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "13px 16px", borderRadius: 12, marginBottom: 22,
-              background: isError ? "rgba(204,89,173,0.12)" : "rgba(74,222,128,0.1)",
-              border: `1px solid ${isError ? `${C.pink}40` : "rgba(74,222,128,0.3)"}`,
-              color: isError ? C.pink : "#4ADE80",
-              fontSize: 13, fontWeight: 600,
-              animation: "msgIn .25s ease",
-            }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", borderRadius: 12, marginBottom: 22, background: isError ? "rgba(204,89,173,0.12)" : "rgba(74,222,128,0.1)", border: `1px solid ${isError ? `${C.pink}40` : "rgba(74,222,128,0.3)"}`, color: isError ? C.pink : "#4ADE80", fontSize: 13, fontWeight: 600, animation: "msgIn .25s ease" }}>
               {isError ? <AlertCircle size={16} strokeWidth={2.5} /> : <CheckCircle2 size={16} strokeWidth={2.5} />}
               {mensaje}
             </div>
           )}
 
-          <form id="obra-form" onSubmit={handleSubmit}>
+          <form id="editar-form" onSubmit={handleSubmit}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16, alignItems: "start" }}>
 
-              {/* ── Left column ── */}
+              {/* ── Left ── */}
               <div>
                 <SectionCard title="Información básica" icon={Type} accent={C.orange}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                     <div>
                       <FieldLabel req>Título de la obra</FieldLabel>
-                      <input
-                        name="titulo" value={formData.titulo} onChange={handleChange}
-                        placeholder="Ej: Amanecer en la Huasteca" required disabled={loading}
-                        style={inputStyle(focused === "titulo", loading)} {...fi("titulo")}
-                      />
+                      <input name="titulo" value={formData.titulo} onChange={handleChange} placeholder="Ej: Amanecer en la Huasteca" required disabled={loading} style={inputStyle(focused === "titulo", loading)} {...fi("titulo")} />
                     </div>
                     <div>
                       <FieldLabel req><FileText size={11} /> Descripción</FieldLabel>
-                      <textarea
-                        name="descripcion" value={formData.descripcion} onChange={handleChange}
-                        placeholder="Describe la obra, su significado, la historia detrás…"
-                        rows={4} required disabled={loading}
-                        style={{ ...inputStyle(focused === "desc", loading), resize: "vertical" as const }} {...fi("desc")}
-                      />
+                      <textarea name="descripcion" value={formData.descripcion} onChange={handleChange} placeholder="Describe la obra…" rows={4} required disabled={loading} style={{ ...inputStyle(focused === "desc", loading), resize: "vertical" as const }} {...fi("desc")} />
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                       <div>
@@ -420,12 +417,7 @@ export default function CrearObra() {
                       </div>
                       <div>
                         <FieldLabel><Calendar size={11} /> Año de creación</FieldLabel>
-                        <input
-                          type="number" name="anio_creacion" value={formData.anio_creacion || ""}
-                          onChange={handleChange} min="1900" max={new Date().getFullYear()}
-                          placeholder={String(new Date().getFullYear())} disabled={loading}
-                          style={inputStyle(focused === "anio", loading)} {...fi("anio")}
-                        />
+                        <input type="number" name="anio_creacion" value={formData.anio_creacion || ""} onChange={handleChange} min="1900" max={new Date().getFullYear()} disabled={loading} style={inputStyle(focused === "anio", loading)} {...fi("anio")} />
                       </div>
                     </div>
                   </div>
@@ -440,11 +432,7 @@ export default function CrearObra() {
                     ].map(({ name, label, ph }) => (
                       <div key={name}>
                         <FieldLabel>{label}</FieldLabel>
-                        <input
-                          type="number" name={name} value={(formData as any)[name] || ""}
-                          onChange={handleChange} placeholder={ph} step="0.01" min="0"
-                          disabled={loading} style={inputStyle(focused === name, loading)} {...fi(name)}
-                        />
+                        <input type="number" name={name} value={(formData as any)[name] || ""} onChange={handleChange} placeholder={ph} step="0.01" min="0" disabled={loading} style={inputStyle(focused === name, loading)} {...fi(name)} />
                       </div>
                     ))}
                   </div>
@@ -456,23 +444,46 @@ export default function CrearObra() {
                     <Toggle label="Incluye certificado de autenticidad" name="con_certificado" checked={formData.con_certificado} onChange={handleChange} disabled={loading} icon={Award} accent={C.gold} />
                   </div>
                 </SectionCard>
+
+                {/* Estado de publicación */}
+                <SectionCard title="Estado de publicación" icon={CheckCircle2} accent={C.orange}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                    {ESTADOS_OPTS.map(({ val, label, color }) => {
+                      const active = formData.estado === val;
+                      return (
+                        <button key={val} type="button"
+                          onClick={() => setFormData(p => ({ ...p, estado: val }))}
+                          style={{
+                            padding: "11px 8px", borderRadius: 10,
+                            border: `1.5px solid ${active ? `${color}60` : C.border}`,
+                            background: active ? `${color}18` : "rgba(255,255,255,0.02)",
+                            color: active ? color : C.muted,
+                            fontWeight: active ? 700 : 400, fontSize: 12.5,
+                            cursor: "pointer", fontFamily: "'Outfit',sans-serif",
+                            transition: "all .15s",
+                            boxShadow: active ? `0 4px 14px ${color}20` : "none",
+                          }}
+                          onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.borderColor = `${color}35`; (e.currentTarget as HTMLElement).style.color = color; } }}
+                          onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.borderColor = C.border; (e.currentTarget as HTMLElement).style.color = C.muted; } }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </SectionCard>
               </div>
 
-              {/* ── Right column ── */}
+              {/* ── Right ── */}
               <div>
-
                 {/* Precio */}
                 <SectionCard title="Precio" icon={DollarSign} accent={C.gold}>
                   <FieldLabel req>Precio base (MXN)</FieldLabel>
                   <div style={{ position: "relative" }}>
                     <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 14, fontWeight: 800, color: C.gold, pointerEvents: "none" }}>$</span>
-                    <input
-                      type="number" name="precio_base" value={formData.precio_base || ""}
-                      onChange={handleChange} placeholder="2,500" step="0.01" min="0" required
-                      disabled={loading} style={{ ...inputStyle(focused === "precio", loading), paddingLeft: 30 }} {...fi("precio")}
-                    />
+                    <input type="number" name="precio_base" value={formData.precio_base || ""} onChange={handleChange} placeholder="2,500" step="0.01" min="0" disabled={loading} style={{ ...inputStyle(focused === "precio", loading), paddingLeft: 30 }} {...fi("precio")} />
                   </div>
-                  {formData.precio_base > 0 && (
+                  {Number(formData.precio_base) > 0 && (
                     <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 10, background: `${C.gold}12`, border: `1px solid ${C.gold}25`, display: "flex", justifyContent: "space-between", fontSize: 13, color: C.gold, fontWeight: 700 }}>
                       <span>Total estimado</span>
                       <span>${Number(formData.precio_base).toLocaleString("es-MX")} MXN</span>
@@ -483,22 +494,9 @@ export default function CrearObra() {
                 {/* Imagen */}
                 <SectionCard title="Imagen principal" icon={ImageIcon} accent={C.pink}>
                   <FieldLabel><LinkIcon size={11} /> URL de imagen</FieldLabel>
-                  <input
-                    type="url" name="imagen_principal" value={formData.imagen_principal || ""}
-                    onChange={handleChange} placeholder="https://…/imagen.jpg"
-                    disabled={loading} style={inputStyle(focused === "img", loading)} {...fi("img")}
-                  />
-                  <div style={{ fontSize: 12, color: C.muted, marginTop: 7, marginBottom: 14 }}>
-                    Imgur, Cloudinary u otro servicio de imágenes.
-                  </div>
-                  <div style={{
-                    borderRadius: 12, overflow: "hidden",
-                    border: `1.5px dashed ${formData.imagen_principal ? `${C.pink}60` : C.border}`,
-                    height: 180, background: "rgba(255,255,255,0.02)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    transition: "border-color .2s",
-                    position: "relative",
-                  }}>
+                  <input type="url" name="imagen_principal" value={formData.imagen_principal || ""} onChange={handleChange} placeholder="https://…/imagen.jpg" disabled={loading} style={inputStyle(focused === "img", loading)} {...fi("img")} />
+                  <div style={{ fontSize: 12, color: C.muted, marginTop: 7, marginBottom: 14 }}>Imgur, Cloudinary u otro servicio.</div>
+                  <div style={{ borderRadius: 12, overflow: "hidden", border: `1.5px dashed ${formData.imagen_principal ? `${C.pink}60` : C.border}`, height: 180, background: "rgba(255,255,255,0.02)", display: "flex", alignItems: "center", justifyContent: "center", transition: "border-color .2s" }}>
                     {formData.imagen_principal ? (
                       <img src={formData.imagen_principal} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                     ) : (
@@ -511,33 +509,24 @@ export default function CrearObra() {
                 </SectionCard>
 
                 {/* Resumen */}
-                <div style={{
-                  background: C.surface, borderRadius: 18,
-                  border: `1px solid ${C.border}`,
-                  padding: "20px", backdropFilter: "blur(20px)",
-                  position: "relative", overflow: "hidden",
-                }}>
+                <div style={{ background: C.surface, borderRadius: 18, border: `1px solid ${C.border}`, padding: "20px", backdropFilter: "blur(20px)", position: "relative", overflow: "hidden" }}>
                   <div style={{ position: "absolute", bottom: -30, right: -30, width: 100, height: 100, borderRadius: "50%", background: `radial-gradient(circle, ${C.orange}12, transparent 70%)`, pointerEvents: "none" }} />
                   <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16 }}>Resumen</div>
                   {[
-                    { label: "Título",    val: formData.titulo || "—" },
-                    { label: "Artista",   val: currentArtist?.nombre_artistico || currentArtist?.nombre_completo || "—" },
-                    { label: "Categoría", val: currentCat?.nombre || "—" },
-                    { label: "Precio",    val: formData.precio_base ? `$${Number(formData.precio_base).toLocaleString("es-MX")}` : "—" },
-                    { label: "Año",       val: formData.anio_creacion ? String(formData.anio_creacion) : "—" },
-                  ].map(({ label, val }, i, arr) => (
-                    <div key={label} style={{
-                      display: "flex", justifyContent: "space-between", fontSize: 13,
-                      borderBottom: i < arr.length - 1 ? `1px solid rgba(255,255,255,0.05)` : "none",
-                      paddingBottom: 10, marginBottom: 10,
-                    }}>
+                    { label: "Título",    val: formData.titulo || "—",   color: undefined },
+                    { label: "Artista",   val: currentArtist?.nombre_artistico || currentArtist?.nombre_completo || "—", color: undefined },
+                    { label: "Categoría", val: currentCat?.nombre || "—", color: undefined },
+                    { label: "Precio",    val: formData.precio_base ? `$${Number(formData.precio_base).toLocaleString("es-MX")}` : "—", color: undefined },
+                    { label: "Estado",    val: currentEstado?.label || "—", color: currentEstado?.color },
+                  ].map(({ label, val, color }, i, arr) => (
+                    <div key={label} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderBottom: i < arr.length - 1 ? `1px solid rgba(255,255,255,0.05)` : "none", paddingBottom: 10, marginBottom: 10 }}>
                       <span style={{ color: C.muted }}>{label}</span>
-                      <span style={{ fontWeight: 600, color: C.text, maxWidth: 160, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{val}</span>
+                      <span style={{ fontWeight: 600, color: color || C.text, maxWidth: 160, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{val}</span>
                     </div>
                   ))}
                 </div>
-
               </div>
+
             </div>
           </form>
         </main>
@@ -545,8 +534,8 @@ export default function CrearObra() {
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap');
-        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-        @keyframes msgIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes spin   { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        @keyframes msgIn  { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
         input::placeholder, textarea::placeholder { color: rgba(255,255,255,0.2); }
         select option { background: #1a1030; color: #ffffff; }
         * { box-sizing: border-box; }

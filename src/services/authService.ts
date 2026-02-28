@@ -18,6 +18,7 @@ interface LoginResponse {
     nombre: string;
     correo: string;
     estado: string;
+    rol: string;   // ← AGREGA ESTO
   };
   attemptsRemaining?: number;
   totalAttempts?: number;
@@ -92,33 +93,51 @@ class AuthService {
     }
   }
 
-  async register(nombre: string, correo: string, contrasena: string): Promise<RegisterResponse> {
-    try {
-      const url = `${this.apiUrl}/api/auth/register`;
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ nombre, correo, contrasena }),
-      });
+ async register(nombre: string, correo: string, contrasena: string, aceptoTerminos: boolean = true): Promise<RegisterResponse> {
+  try {
+    const url = `${this.apiUrl}/api/auth/register`;
+    console.log('📡 Registrando en:', url);
 
-      const data = await response.json();
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ nombre, correo, contrasena, aceptoTerminos }),
+    });
 
-      if (!response.ok) {
-        throw {
-          status: response.status,
-          error: data,
-        };
-      }
+    const data = await response.json();
+    console.log('📥 Respuesta registro:', response.status, data);
 
-      return data;
-    } catch (error) {
-      throw error;
+    if (!response.ok) {
+      throw {
+        status: response.status,
+        error: data,
+      };
     }
+
+    return data;
+  } catch (error) {
+    throw error;
+  }
+}
+  async verifyEmail(correo: string, codigo: string): Promise<{ message: string; verified: boolean }> {
+  const url = `${this.apiUrl}/api/auth/verify-email`;
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ correo, codigo }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw { status: response.status, error: data };
   }
 
+  return data;
+}
   async verifyGmail2FA(correo: string, codigo: string): Promise<LoginResponse> {
     try {
       const url = `${this.apiUrl}/api/auth/verify-login-code`;
