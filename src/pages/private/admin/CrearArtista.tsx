@@ -14,9 +14,6 @@ import { useRef } from "react";
 import { authService } from "../../../services/authService";
 import { obraService } from "../../../services/obraService";
 
-// ─────────────────────────────────────────────────────────────
-// PALETA OFICIAL NU-B STUDIO
-// ─────────────────────────────────────────────────────────────
 const C = {
   orange:   "#FF840E",
   pink:     "#CC59AD",
@@ -59,7 +56,6 @@ const ESTADOS = [
   { val:"suspendido", label:"Suspendido", color:C.pink     },
 ];
 
-// ─── Logo ────────────────────────────────────────────────────
 function LogoMark({ size = 38 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
@@ -78,7 +74,6 @@ function LogoMark({ size = 38 }: { size?: number }) {
   );
 }
 
-// ─── Sidebar ─────────────────────────────────────────────────
 function Sidebar({ navigate }: { navigate: any }) {
   const active   = "artistas";
   const userName = authService.getUserName?.() || "Admin";
@@ -139,7 +134,6 @@ function Sidebar({ navigate }: { navigate: any }) {
   );
 }
 
-// ─── Helpers ─────────────────────────────────────────────────
 function inputStyle(focused: boolean, disabled: boolean): React.CSSProperties {
   return {
     width: "100%", padding: "11px 14px", boxSizing: "border-box",
@@ -175,7 +169,6 @@ function Card({ accent, icon: Icon, title, children, delay = 0 }: any) {
   );
 }
 
-// ─── MAIN ────────────────────────────────────────────────────
 export default function CrearArtista() {
   const navigate = useNavigate();
   const fileRef  = useRef<HTMLInputElement>(null);
@@ -189,9 +182,10 @@ export default function CrearArtista() {
   const [fotoMode,   setFotoMode]   = useState<"upload" | "url">("upload");
   const [dragOver,   setDragOver]   = useState(false);
 
+  // ✅ Sin campo matricula — se genera automáticamente en backend
   const [form, setForm] = useState({
     nombre_completo: "", nombre_artistico: "", biografia: "",
-    foto_perfil: "", correo: "", telefono: "", matricula: "",
+    foto_perfil: "", correo: "", telefono: "",
     id_categoria_principal: "", porcentaje_comision: 15, estado: "pendiente",
   });
 
@@ -207,7 +201,7 @@ export default function CrearArtista() {
 
   const flash = (msg: string, err: boolean) => {
     setMensaje(msg); setIsError(err);
-    setTimeout(() => setMensaje(""), 5000);
+    setTimeout(() => setMensaje(""), 6000);
   };
 
   const handleFoto = (file: File) => {
@@ -238,7 +232,6 @@ export default function CrearArtista() {
       let res: Response;
 
       if (fotoFile) {
-        // Con archivo → FormData (multer en backend)
         const fd = new FormData();
         Object.entries(form).forEach(([k, v]) => fd.append(k, String(v)));
         fd.append("foto", fotoFile);
@@ -248,7 +241,6 @@ export default function CrearArtista() {
           body: fd,
         });
       } else {
-        // Solo datos + URL (o sin foto)
         res = await fetch(`${API_URL}/api/artistas`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${authService.getToken()}` },
@@ -258,8 +250,11 @@ export default function CrearArtista() {
 
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.message || "Error al crear");
-      flash("¡Artista creado exitosamente!", false);
-      setTimeout(() => navigate("/admin/artistas"), 1500);
+
+      // ✅ Muestra la matrícula que devuelve el backend
+      const mat = json.data?.matricula || "";
+      flash(`¡Artista creado exitosamente! Matrícula: ${mat}`, false);
+      setTimeout(() => navigate("/admin/artistas"), 2200);
     } catch (err: any) {
       flash(err.message || "Error al crear el artista", true);
     } finally { setLoading(false); }
@@ -272,8 +267,8 @@ export default function CrearArtista() {
   const est       = ESTADOS.find(e => e.val === form.estado);
   const comision  = 10000 * Number(form.porcentaje_comision) / 100;
   const fotoSrc   = fotoPreview || form.foto_perfil || "";
+  const anio      = new Date().getFullYear();
 
-  // Avatar gradient según estado seleccionado
   const avatarGrad = form.estado === "activo"
     ? `linear-gradient(135deg, ${C.green}40, ${C.blue}30)`
     : form.estado === "pendiente"
@@ -282,8 +277,6 @@ export default function CrearArtista() {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: C.bg, fontFamily: FB, color: C.cream, position: "relative" }}>
-
-      {/* Orbs */}
       <div style={{ position: "fixed", top: -160, right: -120, width: 600, height: 600, borderRadius: "50%", background: `radial-gradient(circle, ${C.pink}09, transparent 70%)`, pointerEvents: "none", zIndex: 0 }} />
       <div style={{ position: "fixed", bottom: -100, left: 200, width: 500, height: 500, borderRadius: "50%", background: `radial-gradient(circle, ${C.purple}08, transparent 70%)`, pointerEvents: "none", zIndex: 0 }} />
       <div style={{ position: "fixed", top: "45%", right: "30%", width: 360, height: 360, borderRadius: "50%", background: `radial-gradient(circle, ${C.orange}05, transparent 70%)`, pointerEvents: "none", zIndex: 0 }} />
@@ -299,21 +292,17 @@ export default function CrearArtista() {
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = `${C.orange}50`; (e.currentTarget as HTMLElement).style.color = C.orange; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = C.border; (e.currentTarget as HTMLElement).style.color = C.creamMut; }}
             ><ArrowLeft size={14} strokeWidth={2} /> Artistas</button>
-
             <div style={{ width: 1, height: 22, background: C.borderBr }} />
-
             <div>
               <div style={{ fontSize: 17, fontWeight: 900, color: C.cream, fontFamily: FD, lineHeight: 1 }}>Nuevo Artista</div>
               <div style={{ fontSize: 11.5, color: C.creamMut, marginTop: 3, fontFamily: FB }}>Registra un artista en el catálogo</div>
             </div>
           </div>
-
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={() => navigate("/admin/artistas")} disabled={loading} style={{ padding: "9px 18px", borderRadius: 9, border: `1px solid ${C.border}`, background: "transparent", color: C.creamSub, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FB, transition: "all .15s" }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = C.borderHi; (e.currentTarget as HTMLElement).style.color = C.cream; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = C.border; (e.currentTarget as HTMLElement).style.color = C.creamSub; }}
             >Cancelar</button>
-
             <button form="form-crear-artista" type="submit" disabled={loading} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 22px", borderRadius: 9, border: "none", background: loading ? `${C.orange}40` : `linear-gradient(135deg, ${C.orange}, ${C.magenta})`, color: "white", fontSize: 13.5, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer", fontFamily: FB, boxShadow: loading ? "none" : `0 6px 24px ${C.orange}45`, transition: "transform .15s, box-shadow .15s" }}
               onMouseEnter={e => { if (!loading) { (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLElement).style.boxShadow = `0 10px 32px ${C.orange}60`; } }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLElement).style.boxShadow = loading ? "none" : `0 6px 24px ${C.orange}45`; }}
@@ -323,10 +312,7 @@ export default function CrearArtista() {
           </div>
         </div>
 
-        {/* CONTENT */}
         <main style={{ flex: 1, padding: "28px 32px", overflowY: "auto" }}>
-
-          {/* Page header */}
           <div style={{ marginBottom: 24, animation: "fadeUp .4s ease both" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
               <Star size={12} color={C.gold} fill={C.gold} />
@@ -340,7 +326,6 @@ export default function CrearArtista() {
             </h1>
           </div>
 
-          {/* Alert */}
           {mensaje && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderRadius: 13, marginBottom: 22, background: isError ? `${C.pink}12` : `${C.green}10`, border: `1px solid ${isError ? `${C.pink}40` : `${C.green}35`}`, color: isError ? C.pink : C.green, fontSize: 13.5, fontWeight: 600, fontFamily: FB, animation: "fadeUp .25s ease" }}>
               {isError ? <AlertCircle size={17} strokeWidth={2.5} /> : <CheckCircle2 size={17} strokeWidth={2.5} />}
@@ -395,8 +380,19 @@ export default function CrearArtista() {
                       </select>
                     </div>
                     <div>
-                      <Label><Hash size={10} /> Matrícula / Clave</Label>
-                      <input name="matricula" value={form.matricula} onChange={onChange} disabled={loading} placeholder="Ej: NUB-2024-001" style={inputStyle(focused === "mat", loading)} {...fi("mat")} />
+                      {/* ✅ CAMBIO: matrícula autogenerada — solo informativo */}
+                      <Label><Hash size={10} /> Matrícula</Label>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, background: `${C.purple}10`, border: `1.5px dashed ${C.purple}35`, minHeight: 44, cursor: "default" }}>
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.purple, flexShrink: 0, boxShadow: `0 0 8px ${C.purple}90`, animation: "pulse 2s infinite" }} />
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: C.purple, fontFamily: FB, letterSpacing: 1 }}>
+                            NUB-{anio}-XXXX
+                          </div>
+                          <div style={{ fontSize: 10, color: C.creamMut, fontFamily: FB, marginTop: 1 }}>
+                            Se asigna al guardar
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </Card>
@@ -420,21 +416,15 @@ export default function CrearArtista() {
 
               {/* ── DERECHA ── */}
               <div>
-
-                {/* PROFILE PREVIEW CARD */}
                 <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, overflow: "hidden", marginBottom: 14, backdropFilter: "blur(20px)", position: "relative", animation: "fadeUp .5s ease .05s both" }}>
-                  {/* Banner */}
                   <div style={{ height: 80, background: `linear-gradient(135deg, ${C.pink}30, ${C.purple}20, ${C.blue}15)`, position: "relative" }}>
                     <div style={{ position: "absolute", inset: 0, background: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")` }} />
                     <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${C.pink}, ${C.purple}, ${C.blue})` }} />
-                    {/* Label nuevo artista */}
                     <div style={{ position: "absolute", top: 12, right: 12, display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 20, background: "rgba(10,7,20,0.7)", border: `1px solid ${C.borderHi}`, backdropFilter: "blur(10px)" }}>
                       <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.orange, boxShadow: `0 0 6px ${C.orange}` }} />
                       <span style={{ fontSize: 10, fontWeight: 700, color: C.creamMut, fontFamily: FB, textTransform: "uppercase", letterSpacing: "0.1em" }}>Nuevo</span>
                     </div>
                   </div>
-
-                  {/* Avatar + info */}
                   <div style={{ padding: "0 20px 20px", marginTop: -32 }}>
                     <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 14 }}>
                       <div style={{ width: 64, height: 64, borderRadius: 18, background: fotoSrc ? "transparent" : avatarGrad, border: `3px solid ${C.bg}`, outline: `2px solid ${est?.color || C.pink}50`, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 8px 28px rgba(0,0,0,0.5)`, flexShrink: 0 }}>
@@ -449,7 +439,6 @@ export default function CrearArtista() {
                         </span>
                       )}
                     </div>
-
                     <div style={{ fontSize: 16, fontWeight: 900, color: form.nombre_completo ? C.cream : C.creamMut, fontFamily: form.nombre_completo ? FD : FB, marginBottom: 2 }}>
                       {form.nombre_completo || "Nombre completo"}
                     </div>
@@ -459,10 +448,7 @@ export default function CrearArtista() {
                         <span style={{ fontSize: 12.5, color: C.gold, fontFamily: FB, fontWeight: 600 }}>{form.nombre_artistico}</span>
                       </div>
                     )}
-
                     <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${C.borderBr}, transparent)`, margin: "12px 0" }} />
-
-                    {/* Mini stats */}
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                       <div style={{ background: `${C.purple}12`, border: `1px solid ${C.purple}25`, borderRadius: 10, padding: "8px 10px" }}>
                         <div style={{ fontSize: 10, color: C.creamMut, textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: FB, marginBottom: 3 }}>Disciplina</div>
@@ -476,10 +462,7 @@ export default function CrearArtista() {
                   </div>
                 </div>
 
-                {/* FOTO DE PERFIL — uploader dual */}
                 <Card accent={C.pink} icon={ImageIcon} title="Foto de perfil" delay={0.1}>
-
-                  {/* Tabs */}
                   <div style={{ display: "flex", marginBottom: 14, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.border}`, background: C.input }}>
                     {(["upload", "url"] as const).map(tab => (
                       <button key={tab} type="button" onClick={() => setFotoMode(tab)} style={{ flex: 1, padding: "9px", border: "none", cursor: "pointer", fontFamily: FB, fontSize: 12.5, fontWeight: fotoMode === tab ? 800 : 500, background: fotoMode === tab ? `linear-gradient(135deg, ${C.pink}25, ${C.purple}15)` : "transparent", color: fotoMode === tab ? C.cream : C.creamMut, borderRight: tab === "upload" ? `1px solid ${C.border}` : "none", transition: "all .15s" }}>
@@ -490,13 +473,9 @@ export default function CrearArtista() {
                       </button>
                     ))}
                   </div>
-
-                  {/* Input oculto */}
                   <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleFoto(f); }} />
-
                   {fotoMode === "upload" ? (
                     fotoFile ? (
-                      /* Archivo seleccionado — mini preview cuadrado */
                       <div style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px", borderRadius: 12, border: `1.5px solid ${C.pink}45`, background: `${C.pink}08`, position: "relative" }}>
                         <div style={{ width: 64, height: 64, borderRadius: 14, overflow: "hidden", flexShrink: 0, border: `2px solid ${C.pink}50` }}>
                           <img src={fotoPreview} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -514,14 +493,8 @@ export default function CrearArtista() {
                         </button>
                       </div>
                     ) : (
-                      /* Drop zone */
-                      <div
-                        onClick={() => fileRef.current?.click()}
-                        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                        onDragLeave={() => setDragOver(false)}
-                        onDrop={onDrop}
-                        style={{ borderRadius: 12, border: `2px dashed ${dragOver ? C.pink : C.inputBorder}`, height: 120, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer", background: dragOver ? `${C.pink}08` : C.input, transition: "all .2s" }}
-                      >
+                      <div onClick={() => fileRef.current?.click()} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop}
+                        style={{ borderRadius: 12, border: `2px dashed ${dragOver ? C.pink : C.inputBorder}`, height: 120, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer", background: dragOver ? `${C.pink}08` : C.input, transition: "all .2s" }}>
                         <UploadCloud size={24} color={dragOver ? C.pink : C.creamMut} strokeWidth={1.5} />
                         <div style={{ textAlign: "center" }}>
                           <div style={{ fontSize: 12.5, fontWeight: 700, color: dragOver ? C.pink : C.creamSub, fontFamily: FB }}>{dragOver ? "Suelta aquí" : "Arrastra o haz clic"}</div>
@@ -530,7 +503,6 @@ export default function CrearArtista() {
                       </div>
                     )
                   ) : (
-                    /* Tab URL */
                     <>
                       <Label><LinkIcon size={10} /> URL de imagen</Label>
                       <input type="url" name="foto_perfil" value={form.foto_perfil} onChange={e => { onChange(e); clearFoto(); }} placeholder="https://res.cloudinary.com/…/foto.jpg" disabled={loading} style={inputStyle(focused === "foto", loading)} {...fi("foto")} />
@@ -539,7 +511,6 @@ export default function CrearArtista() {
                   )}
                 </Card>
 
-                {/* COMISIÓN */}
                 <Card accent={C.gold} icon={DollarSign} title="Comisión" delay={0.15}>
                   <Label><Percent size={10} /> Porcentaje sobre venta</Label>
                   <div style={{ position: "relative" }}>
@@ -553,7 +524,6 @@ export default function CrearArtista() {
                     </div>
                   )}
                 </Card>
-
               </div>
             </div>
           </form>
@@ -564,6 +534,7 @@ export default function CrearArtista() {
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@300;400;500;600;700;800&display=swap');
         @keyframes spin   { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
         @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes pulse  { 0%,100%{opacity:1} 50%{opacity:0.4} }
         * { box-sizing: border-box; }
         input::placeholder, textarea::placeholder { color: rgba(255,232,200,0.18); font-family: ${FB}; }
         select option { background: #100D1C; color: ${C.cream}; }

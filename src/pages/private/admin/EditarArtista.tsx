@@ -7,8 +7,10 @@ import {
   DollarSign, Award, Link as LinkIcon, Type,
   FileText, Phone, Mail, Hash,
   LayoutDashboard, ShoppingBag, BarChart2, Settings,
-  LogOut, Layers, Star, Palette, MapPin, Percent
+  LogOut, Layers, Star, Palette, MapPin, Percent,
+  UploadCloud, X, FileImage
 } from "lucide-react";
+import { useRef } from "react";
 import { authService } from "../../../services/authService";
 import { obraService } from "../../../services/obraService";
 
@@ -54,7 +56,6 @@ const ESTADOS = [
   { val:"suspendido", label:"Suspendido", color:C.pink    },
 ];
 
-// ─── Logo ────────────────────────────────────────────────────
 function LogoMark({ size = 38 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
@@ -73,7 +74,6 @@ function LogoMark({ size = 38 }: { size?: number }) {
   );
 }
 
-// ─── Sidebar ─────────────────────────────────────────────────
 function Sidebar({ navigate }: { navigate: any }) {
   const active   = "artistas";
   const userName = authService.getUserName?.() || "Admin";
@@ -134,7 +134,6 @@ function Sidebar({ navigate }: { navigate: any }) {
   );
 }
 
-// ─── Helpers ──────────────────────────────────────────────────
 function inputStyle(focused: boolean, disabled: boolean): React.CSSProperties {
   return {
     width: "100%", padding: "11px 14px", boxSizing: "border-box",
@@ -170,7 +169,6 @@ function Card({ accent, icon: Icon, title, children, delay = 0 }: any) {
   );
 }
 
-// ─── MAIN ─────────────────────────────────────────────────────
 export default function EditarArtista() {
   const navigate    = useNavigate();
   const { id }      = useParams<{ id: string }>();
@@ -180,7 +178,13 @@ export default function EditarArtista() {
   const [isError,     setIsError]     = useState(false);
   const [focused,     setFocused]     = useState<string | null>(null);
   const [categorias,  setCategorias]  = useState<any[]>([]);
+  const fileRef    = useRef<HTMLInputElement>(null);
+  const [fotoFile,   setFotoFile]   = useState<File | null>(null);
+  const [fotoPreview,setFotoPreview] = useState<string>("");
+  const [fotoMode,   setFotoMode]   = useState<"upload" | "url">("upload");
+  const [dragOver,   setDragOver]   = useState(false);
 
+  // ✅ matricula se guarda en estado para mostrarlo, pero no se envía al PUT
   const [form, setForm] = useState({
     nombre_completo: "", nombre_artistico: "", biografia: "",
     foto_perfil: "", correo: "", telefono: "", matricula: "",
@@ -198,7 +202,18 @@ export default function EditarArtista() {
         const json = await res.json();
         if (json.success && json.data) {
           const a = json.data;
-          setForm({ nombre_completo: a.nombre_completo || "", nombre_artistico: a.nombre_artistico || "", biografia: a.biografia || "", foto_perfil: a.foto_perfil || "", correo: a.correo || "", telefono: a.telefono || "", matricula: a.matricula || "", id_categoria_principal: a.id_categoria_principal || "", porcentaje_comision: a.porcentaje_comision || 15, estado: a.estado || "pendiente" });
+          setForm({
+            nombre_completo:       a.nombre_completo       || "",
+            nombre_artistico:      a.nombre_artistico      || "",
+            biografia:             a.biografia             || "",
+            foto_perfil:           a.foto_perfil           || "",
+            correo:                a.correo                || "",
+            telefono:              a.telefono              || "",
+            matricula:             a.matricula             || "",  // solo para mostrar
+            id_categoria_principal: a.id_categoria_principal || "",
+            porcentaje_comision:   a.porcentaje_comision   || 15,
+            estado:                a.estado                || "pendiente",
+          });
         } else { flash("No se encontró el artista", true); }
       } catch { flash("Error al cargar datos", true); }
       finally { setLoadingData(false); }
@@ -216,12 +231,51 @@ export default function EditarArtista() {
     setTimeout(() => setMensaje(""), 5000);
   };
 
+  const handleFoto = (file: File) => {
+    if (!file.type.startsWith("image/")) return flash("Solo se permiten imágenes", true);
+    if (file.size > 10 * 1024 * 1024) return flash("La foto no puede superar 10 MB", true);
+    setFotoFile(file);
+    setFotoPreview(URL.createObjectURL(file));
+    setForm(p => ({ ...p, foto_perfil: "" }));
+  };
+
+  const clearFoto = () => {
+    if (fotoPreview) URL.revokeObjectURL(fotoPreview);
+    setFotoFile(null); setFotoPreview("");
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFoto(file);
+  };
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!form.nombre_completo) return flash("El nombre completo es obligatorio", true);
     setLoading(true);
     try {
-      const res  = await fetch(`${API_URL}/api/artistas/${id}`, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${authService.getToken()}` }, body: JSON.stringify(form) });
+      // ✅ Excluir matricula del body — el backend la ignora pero por claridad no la enviamos
+      const { matricula: _mat, ...formSinMatricula } = form;
+      let res: Response;
+
+      if (fotoFile) {
+        const fd = new FormData();
+        Object.entries(formSinMatricula).forEach(([k, v]) => fd.append(k, String(v)));
+        fd.append("foto", fotoFile);
+        res = await fetch(`${API_URL}/api/artistas/${id}`, {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${authService.getToken()}` },
+          body: fd,
+        });
+      } else {
+        res = await fetch(`${API_URL}/api/artistas/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${authService.getToken()}` },
+          body: JSON.stringify(formSinMatricula),
+        });
+      }
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.message || "Error al actualizar");
       flash("¡Artista actualizado correctamente!", false);
@@ -236,8 +290,8 @@ export default function EditarArtista() {
   const cat      = categorias.find(c => String(c.id_categoria) === String(form.id_categoria_principal));
   const est      = ESTADOS.find(e => e.val === form.estado);
   const comision = (10000 * Number(form.porcentaje_comision) / 100);
+  const fotoSrc  = fotoPreview || form.foto_perfil || "";
 
-  // ── AVATARES COLOR ──
   const avatarGrad = form.estado === "activo"
     ? `linear-gradient(135deg, ${C.green}40, ${C.blue}30)`
     : form.estado === "pendiente"
@@ -257,8 +311,6 @@ export default function EditarArtista() {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: C.bg, fontFamily: FB, color: C.cream, position: "relative" }}>
-
-      {/* Orbs */}
       <div style={{ position: "fixed", top: -160, right: -120, width: 600, height: 600, borderRadius: "50%", background: `radial-gradient(circle, ${C.pink}09, transparent 70%)`, pointerEvents: "none", zIndex: 0 }} />
       <div style={{ position: "fixed", bottom: -100, left: 200, width: 500, height: 500, borderRadius: "50%", background: `radial-gradient(circle, ${C.purple}08, transparent 70%)`, pointerEvents: "none", zIndex: 0 }} />
       <div style={{ position: "fixed", top: "45%", right: "30%", width: 360, height: 360, borderRadius: "50%", background: `radial-gradient(circle, ${C.orange}05, transparent 70%)`, pointerEvents: "none", zIndex: 0 }} />
@@ -274,9 +326,7 @@ export default function EditarArtista() {
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = `${C.orange}50`; (e.currentTarget as HTMLElement).style.color = C.orange; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = C.border; (e.currentTarget as HTMLElement).style.color = C.creamMut; }}
             ><ArrowLeft size={14} strokeWidth={2} /> Artistas</button>
-
             <div style={{ width: 1, height: 22, background: C.borderBr }} />
-
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
                 <span style={{ fontSize: 17, fontWeight: 900, color: C.cream, fontFamily: FD }}>Editar Artista</span>
@@ -288,10 +338,12 @@ export default function EditarArtista() {
               </div>
               <div style={{ fontSize: 11.5, color: C.creamMut, marginTop: 2, fontFamily: FB }}>
                 ID <span style={{ color: C.orange, fontWeight: 700 }}>#{id}</span>
+                {form.matricula && (
+                  <span style={{ marginLeft: 8, color: C.purple, fontWeight: 700 }}>· {form.matricula}</span>
+                )}
               </div>
             </div>
           </div>
-
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={() => navigate("/admin/artistas")} style={{ padding: "9px 18px", borderRadius: 9, border: `1px solid ${C.border}`, background: "transparent", color: C.creamSub, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FB, transition: "all .15s" }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = C.borderHi; (e.currentTarget as HTMLElement).style.color = C.cream; }}
@@ -306,10 +358,7 @@ export default function EditarArtista() {
           </div>
         </div>
 
-        {/* CONTENT */}
         <main style={{ flex: 1, padding: "28px 32px", overflowY: "auto" }}>
-
-          {/* Page title */}
           <div style={{ marginBottom: 24, animation: "fadeUp .4s ease both" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
               <Star size={12} color={C.gold} fill={C.gold} />
@@ -323,7 +372,6 @@ export default function EditarArtista() {
             </h1>
           </div>
 
-          {/* Alert */}
           {mensaje && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderRadius: 13, marginBottom: 22, background: isError ? `${C.pink}12` : `${C.green}10`, border: `1px solid ${isError ? `${C.pink}40` : `${C.green}35`}`, color: isError ? C.pink : C.green, fontSize: 13.5, fontWeight: 600, fontFamily: FB, animation: "fadeUp .25s ease" }}>
               {isError ? <AlertCircle size={17} strokeWidth={2.5} /> : <CheckCircle2 size={17} strokeWidth={2.5} />}
@@ -345,7 +393,7 @@ export default function EditarArtista() {
                       </div>
                       <div>
                         <Label>Nombre artístico</Label>
-                        <input name="nombre_artistico" value={form.nombre_artistico} onChange={onChange} disabled={loading} style={inputStyle(focused === "na", loading)} {...fi("na")} placeholder="Alias o seudónimo" />
+                        <input name="nombre_artistico" value={form.nombre_artistico} onChange={onChange} disabled={loading} style={inputStyle(focused === "na", loading)} placeholder="Alias o seudónimo" {...fi("na")} />
                       </div>
                     </div>
                     <div>
@@ -378,8 +426,17 @@ export default function EditarArtista() {
                       </select>
                     </div>
                     <div>
-                      <Label><Hash size={10} /> Matrícula / Clave</Label>
-                      <input name="matricula" value={form.matricula} onChange={onChange} disabled={loading} placeholder="EJ: NUB-2024-001" style={inputStyle(focused === "mat", loading)} {...fi("mat")} />
+                      {/* ✅ CAMBIO: matrícula readonly — se muestra pero no se edita */}
+                      <Label><Hash size={10} /> Matrícula</Label>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, background: `${C.purple}10`, border: `1.5px solid ${C.purple}30`, minHeight: 44, cursor: "default" }}>
+                        <Hash size={13} color={C.purple} />
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: C.purple, fontFamily: FB, letterSpacing: 1 }}>
+                            {form.matricula || "Sin asignar"}
+                          </div>
+                          <div style={{ fontSize: 10, color: C.creamMut, fontFamily: FB, marginTop: 1 }}>No editable</div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </Card>
@@ -403,36 +460,16 @@ export default function EditarArtista() {
 
               {/* ── DERECHA ── */}
               <div>
-
-                {/* PROFILE CARD — protagonista de la columna derecha */}
-                <div style={{
-                  background: C.card, border: `1px solid ${C.border}`,
-                  borderRadius: 20, overflow: "hidden", marginBottom: 14,
-                  backdropFilter: "blur(20px)", position: "relative",
-                  animation: "fadeUp .5s ease .05s both",
-                }}>
-                  {/* Banner degradado de fondo */}
+                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, overflow: "hidden", marginBottom: 14, backdropFilter: "blur(20px)", position: "relative", animation: "fadeUp .5s ease .05s both" }}>
                   <div style={{ height: 80, background: `linear-gradient(135deg, ${C.pink}30, ${C.purple}20, ${C.blue}15)`, position: "relative" }}>
                     <div style={{ position: "absolute", inset: 0, background: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")` }} />
-                    {/* Multicolor top bar */}
                     <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${C.pink}, ${C.purple}, ${C.blue})` }} />
                   </div>
-
-                  {/* Avatar flotante */}
                   <div style={{ padding: "0 20px 20px", marginTop: -32, position: "relative" }}>
                     <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 14 }}>
-                      <div style={{
-                        width: 64, height: 64, borderRadius: 18,
-                        background: form.foto_perfil ? "transparent" : avatarGrad,
-                        border: `3px solid ${C.bg}`,
-                        outline: `2px solid ${est?.color || C.pink}50`,
-                        overflow: "hidden",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        boxShadow: `0 8px 28px rgba(0,0,0,0.5)`,
-                        flexShrink: 0,
-                      }}>
-                        {form.foto_perfil
-                          ? <img src={form.foto_perfil} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      <div style={{ width: 64, height: 64, borderRadius: 18, background: fotoSrc ? "transparent" : avatarGrad, border: `3px solid ${C.bg}`, outline: `2px solid ${est?.color || C.pink}50`, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 8px 28px rgba(0,0,0,0.5)`, flexShrink: 0 }}>
+                        {fotoSrc
+                          ? <img src={fotoSrc} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                           : <span style={{ fontSize: 22, fontWeight: 900, color: C.cream, fontFamily: FD }}>{initials}</span>
                         }
                       </div>
@@ -442,7 +479,6 @@ export default function EditarArtista() {
                         </span>
                       )}
                     </div>
-
                     <div style={{ fontSize: 16, fontWeight: 900, color: C.cream, fontFamily: FD, marginBottom: 2 }}>
                       {form.nombre_completo || <span style={{ color: C.creamMut, fontFamily: FB, fontWeight: 400, fontSize: 14 }}>Nombre completo</span>}
                     </div>
@@ -452,10 +488,7 @@ export default function EditarArtista() {
                         <span style={{ fontSize: 12.5, color: C.gold, fontFamily: FB, fontWeight: 600 }}>{form.nombre_artistico}</span>
                       </div>
                     )}
-
                     <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${C.borderBr}, transparent)`, margin: "12px 0" }} />
-
-                    {/* Mini stats row */}
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                       <div style={{ background: `${C.purple}12`, border: `1px solid ${C.purple}25`, borderRadius: 10, padding: "8px 10px" }}>
                         <div style={{ fontSize: 10, color: C.creamMut, textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: FB, marginBottom: 3 }}>Disciplina</div>
@@ -469,14 +502,67 @@ export default function EditarArtista() {
                   </div>
                 </div>
 
-                {/* FOTO DE PERFIL */}
                 <Card accent={C.pink} icon={ImageIcon} title="Foto de perfil" delay={0.1}>
-                  <Label><LinkIcon size={10} /> URL de imagen</Label>
-                  <input type="url" name="foto_perfil" value={form.foto_perfil} onChange={onChange} placeholder="https://…/foto.jpg" disabled={loading} style={inputStyle(focused === "foto", loading)} {...fi("foto")} />
-                  <div style={{ fontSize: 11.5, color: C.creamMut, marginTop: 6, fontFamily: FB }}>Imgur, Cloudinary u otro servicio de imágenes.</div>
+                  {/* Tabs subir / URL */}
+                  <div style={{ display: "flex", marginBottom: 14, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.border}`, background: C.input }}>
+                    {(["upload", "url"] as const).map(tab => (
+                      <button key={tab} type="button" onClick={() => setFotoMode(tab)} style={{ flex: 1, padding: "9px", border: "none", cursor: "pointer", fontFamily: FB, fontSize: 12.5, fontWeight: fotoMode === tab ? 800 : 500, background: fotoMode === tab ? `linear-gradient(135deg, ${C.pink}25, ${C.purple}15)` : "transparent", color: fotoMode === tab ? C.cream : C.creamMut, borderRight: tab === "upload" ? `1px solid ${C.border}` : "none", transition: "all .15s" }}>
+                        {tab === "upload"
+                          ? <><UploadCloud size={12} style={{ marginRight: 5, verticalAlign: "middle" }} />Subir archivo</>
+                          : <><LinkIcon   size={12} style={{ marginRight: 5, verticalAlign: "middle" }} />URL externa</>}
+                      </button>
+                    ))}
+                  </div>
+                  <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleFoto(f); }} />
+                  {fotoMode === "upload" ? (
+                    fotoFile ? (
+                      <div style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px", borderRadius: 12, border: `1.5px solid ${C.pink}45`, background: `${C.pink}08`, position: "relative" }}>
+                        <div style={{ width: 64, height: 64, borderRadius: 14, overflow: "hidden", flexShrink: 0, border: `2px solid ${C.pink}50` }}>
+                          <img src={fotoPreview} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                            <FileImage size={13} color={C.pink} />
+                            <span style={{ fontSize: 12.5, fontWeight: 700, color: C.cream, fontFamily: FB, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fotoFile.name}</span>
+                          </div>
+                          <span style={{ fontSize: 11.5, color: C.creamMut, fontFamily: FB }}>{(fotoFile.size / 1024 / 1024).toFixed(1)} MB</span>
+                          <button type="button" onClick={() => fileRef.current?.click()} style={{ display: "block", marginTop: 6, fontSize: 11.5, color: C.pink, fontFamily: FB, fontWeight: 700, background: "none", border: "none", cursor: "pointer", padding: 0 }}>Cambiar foto</button>
+                        </div>
+                        <button type="button" onClick={clearFoto} style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: "50%", background: "rgba(10,7,20,0.80)", border: `1px solid ${C.pink}50`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                          <X size={12} color={C.pink} />
+                        </button>
+                      </div>
+                    ) : (
+                      /* Drop zone — si ya tiene foto la muestra como referencia */
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {form.foto_perfil && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, background: `${C.purple}10`, border: `1px solid ${C.purple}25`, marginBottom: 4 }}>
+                            <img src={form.foto_perfil} alt="actual" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", border: `1px solid ${C.purple}40` }} onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            <div>
+                              <div style={{ fontSize: 11.5, fontWeight: 600, color: C.creamSub, fontFamily: FB }}>Foto actual</div>
+                              <div style={{ fontSize: 10.5, color: C.creamMut, fontFamily: FB }}>Sube una nueva para reemplazarla</div>
+                            </div>
+                          </div>
+                        )}
+                        <div onClick={() => fileRef.current?.click()} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop}
+                          style={{ borderRadius: 12, border: `2px dashed ${dragOver ? C.pink : C.inputBorder}`, height: 110, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer", background: dragOver ? `${C.pink}08` : C.input, transition: "all .2s" }}>
+                          <UploadCloud size={24} color={dragOver ? C.pink : C.creamMut} strokeWidth={1.5} />
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, color: dragOver ? C.pink : C.creamSub, fontFamily: FB }}>{dragOver ? "Suelta aquí" : "Arrastra o haz clic"}</div>
+                            <div style={{ fontSize: 11, color: C.creamMut, fontFamily: FB }}>JPG, PNG, WEBP · Máx 10 MB</div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  ) : (
+                    <>
+                      <Label><LinkIcon size={10} /> URL de imagen</Label>
+                      <input type="url" name="foto_perfil" value={form.foto_perfil} onChange={e => { onChange(e); clearFoto(); }} placeholder="https://res.cloudinary.com/…/foto.jpg" disabled={loading} style={inputStyle(focused === "foto", loading)} {...fi("foto")} />
+                      <div style={{ fontSize: 11.5, color: C.creamMut, marginTop: 6, fontFamily: FB }}>Cloudinary, Imgur u otro servicio público.</div>
+                    </>
+                  )}
                 </Card>
 
-                {/* COMISIÓN */}
                 <Card accent={C.gold} icon={DollarSign} title="Comisión" delay={0.15}>
                   <Label><Percent size={10} /> Porcentaje sobre venta</Label>
                   <div style={{ position: "relative" }}>
@@ -490,7 +576,6 @@ export default function EditarArtista() {
                     </div>
                   )}
                 </Card>
-
               </div>
             </div>
           </form>
