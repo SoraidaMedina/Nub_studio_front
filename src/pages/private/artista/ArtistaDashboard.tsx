@@ -1,6 +1,6 @@
 // src/pages/private/artista/ArtistaDashboard.tsx
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom"; // ✅ fix: useLocation
 import {
   LayoutDashboard, Image, User, LogOut, Plus, Eye, Edit3,
   Clock, CheckCircle, XCircle, Menu,
@@ -19,8 +19,11 @@ const C = {
 };
 
 interface Obra {
-  id_obra: number; titulo: string; precio: number; estado: string;
-  imagen_principal?: string; slug?: string; fecha_creacion?: string; categoria?: string;
+  id_obra: number; titulo: string; precio_base?: number; estado: string;
+  imagen_principal?: string; slug?: string; fecha_creacion?: string;
+  categoria?: string; tecnica?: string; activa?: boolean;
+  vistas?: number; permite_marco?: boolean; con_certificado?: boolean;
+  motivo_rechazo?: string | null; destacada?: boolean;
 }
 interface ArtistaInfo {
   id_artista: number; nombre_completo: string; nombre_artistico?: string;
@@ -46,19 +49,35 @@ function Counter({ to, duration = 1200 }: { to: number; duration?: number }) {
   return <>{val}</>;
 }
 
-export default function ArtistaDashboard() {
-  const navigate = useNavigate();
-  const nombre = localStorage.getItem("userName") || "Artista";
-  const token = authService.getToken();
+// ✅ Badge unificado — mismo en ambas vistas
+const getBadge = (estado: string, activa?: boolean) => {
+  if (estado === "aprobada"  && activa)  return { label: "Publicada",   color: C.green };
+  if (estado === "aprobada"  && !activa) return { label: "Inactiva",    color: C.muted };
+  if (estado === "publicada")            return { label: "Publicada",   color: C.green };
+  if (estado === "pendiente")            return { label: "En revisión", color: C.gold  };
+  if (estado === "rechazada")            return { label: "Rechazada",   color: C.pink  };
+  return { label: estado, color: C.muted };
+};
 
-  const [seccion, setSeccion] = useState<"dashboard" | "obras" | "perfil">("dashboard");
-  const [obras, setObras] = useState<Obra[]>([]);
-  const [artista, setArtista] = useState<ArtistaInfo | null>(null);
-  const [stats, setStats] = useState<Stats>({ total: 0, publicadas: 0, pendientes: 0, rechazadas: 0, borradores: 0 });
-  const [loading, setLoading] = useState(true);
+export default function ArtistaDashboard() {
+  const navigate  = useNavigate();
+  const location  = useLocation(); // ✅ fix
+  const nombre    = localStorage.getItem("userName") || "Artista";
+  const token     = authService.getToken();
+
+  const [seccion, setSeccion]     = useState<"dashboard" | "obras" | "perfil">("dashboard");
+  const [obras,   setObras]       = useState<Obra[]>([]);
+  const [artista, setArtista]     = useState<ArtistaInfo | null>(null);
+  const [stats,   setStats]       = useState<Stats>({ total: 0, publicadas: 0, pendientes: 0, rechazadas: 0, borradores: 0 });
+  const [loading, setLoading]     = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [filtro, setFiltro] = useState("todas");
-  const [mounted, setMounted] = useState(false);
+  const [filtro,  setFiltro]      = useState("todas");
+  const [mounted, setMounted]     = useState(false);
+
+  // ✅ fix: si la URL es /artista/perfil, abrir sección perfil automáticamente
+  useEffect(() => {
+    if (location.pathname === "/artista/perfil") setSeccion("perfil");
+  }, [location.pathname]);
 
   useEffect(() => { cargarDatos(); setTimeout(() => setMounted(true), 100); }, []);
 
@@ -67,46 +86,43 @@ export default function ArtistaDashboard() {
     try {
       const [resArtista, resObras] = await Promise.all([
         fetch(`${API}/api/artista-portal/mi-perfil`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API}/api/artista-portal/mis-obras`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/api/artista-portal/mis-obras`,  { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (resArtista.ok) setArtista(await resArtista.json());
       if (resObras.ok) {
         const data = await resObras.json();
         setObras(data.obras || []);
-        setStats(data.stats || { total: 0, publicadas: 0, pendientes: 0, rechazadas: 0, borradores: 0 });
+        // ✅ fix: compatible con pendientes y en_revision
+        const s = data.stats || {};
+        setStats({
+          total:      s.total      || 0,
+          publicadas: s.publicadas || 0,
+          pendientes: s.pendientes ?? s.en_revision ?? 0,
+          rechazadas: s.rechazadas || 0,
+          borradores: s.borradores || 0,
+        });
       }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
 
-  const handleLogout = () => { authService.logout(); navigate("/login"); };
+  const handleLogout   = () => { authService.logout(); navigate("/login"); };
   const obrasFiltradas = filtro === "todas" ? obras : obras.filter(o => o.estado === filtro);
-  const inicial = nombre.charAt(0).toUpperCase();
+  const inicial        = (artista?.nombre_artistico || nombre).charAt(0).toUpperCase();
 
-  const Badge = ({ estado }: { estado: string }) => {
-    const map: Record<string, { c: string; bg: string; label: string }> = {
-      publicada: { c: C.green, bg: `${C.green}15`, label: "Publicada" },
-      pendiente: { c: C.gold, bg: `${C.gold}15`, label: "En revisión" },
-      rechazada: { c: C.pink, bg: `${C.pink}15`, label: "Rechazada" },
-      borrador:  { c: C.muted, bg: "rgba(255,255,255,0.06)", label: "Borrador" },
-    };
-    const s = map[estado] || map.borrador;
-   return (
-  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 12px", borderRadius: 100, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3, color: s.c, background: "rgba(8,6,18,0.82)", border: `1px solid ${s.c}60`, textTransform: "uppercase", whiteSpace: "nowrap", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", boxShadow: `0 2px 12px rgba(0,0,0,0.5), inset 0 0 0 1px ${s.c}40` }}>
-    {estado === "publicada" && <CheckCircle size={10} />}
-    {estado === "pendiente" && <Clock size={10} />}
-    {estado === "rechazada" && <XCircle size={10} />}
-    {s.label}
-  </span>
-);
-  };
+  const formatPrecio = (n: number) =>
+    new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n);
+
+  const formatFecha = (f: string) =>
+    new Date(f).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
 
   const navItems = [
-    { id: "dashboard", label: "Overview", icon: LayoutDashboard },
-    { id: "obras", label: "Mis obras", icon: Image },
-    { id: "perfil", label: "Mi perfil", icon: User },
+    { id: "dashboard", label: "Overview",  icon: LayoutDashboard },
+    { id: "obras",     label: "Mis obras", icon: Image },
+    { id: "perfil",    label: "Mi perfil", icon: User },
   ];
 
+  // ── SIDEBAR ──────────────────────────────────────────────────
   const Sidebar = () => (
     <aside style={{ width: 260, height: "100vh", position: "fixed", left: 0, top: 0, zIndex: 50, background: C.panel, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", backdropFilter: "blur(30px)" }}>
       <div style={{ padding: "28px 24px 20px" }}>
@@ -153,6 +169,7 @@ export default function ArtistaDashboard() {
     </aside>
   );
 
+  // ── SECCIÓN DASHBOARD (overview) ─────────────────────────────
   const SeccionDashboard = () => (
     <div style={{ animation: mounted ? "fadeUp .5s ease both" : "none" }}>
       {/* Hero */}
@@ -182,10 +199,10 @@ export default function ArtistaDashboard() {
       {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 14, marginBottom: 28 }}>
         {[
-          { label: "Total obras", value: stats.total, icon: <Package size={22} />, grad: `${C.orange}, ${C.pink}`, shadow: C.orange },
-          { label: "Publicadas", value: stats.publicadas, icon: <CheckCircle size={22} />, grad: `${C.green}, #00b894`, shadow: C.green },
-          { label: "En revisión", value: stats.pendientes, icon: <Clock size={22} />, grad: `${C.gold}, #e07b00`, shadow: C.gold },
-          { label: "Comisión %", value: artista?.porcentaje_comision || 15, icon: <TrendingUp size={22} />, grad: `${C.purple}, ${C.pink}`, shadow: C.purple },
+          { label: "Total obras", value: stats.total,      icon: <Package size={22} />,    grad: `${C.orange}, ${C.pink}`,  shadow: C.orange },
+          { label: "Publicadas",  value: stats.publicadas, icon: <CheckCircle size={22} />, grad: `${C.green}, #00b894`,    shadow: C.green  },
+          { label: "En revisión", value: stats.pendientes, icon: <Clock size={22} />,       grad: `${C.gold}, #e07b00`,     shadow: C.gold   },
+          { label: "Comisión %",  value: artista?.porcentaje_comision || 15, icon: <TrendingUp size={22} />, grad: `${C.purple}, ${C.pink}`, shadow: C.purple },
         ].map((s, i) => (
           <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: "22px", position: "relative", overflow: "hidden", animation: `fadeUp .5s ease ${i * 0.08}s both`, transition: "transform .2s, box-shadow .2s" }}
             onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.transform = "translateY(-4px)"; el.style.boxShadow = `0 16px 40px ${s.shadow}20`; }}
@@ -201,7 +218,7 @@ export default function ArtistaDashboard() {
         ))}
       </div>
 
-      {/* Obras recientes + sidebar info */}
+      {/* Obras recientes + mini info */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16 }} className="dashboard-grid">
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, overflow: "hidden" }}>
           <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -221,23 +238,35 @@ export default function ArtistaDashboard() {
                 Subir primera obra
               </button>
             </div>
-          ) : obras.slice(0, 6).map((obra, i) => (
-            <div key={obra.id_obra} style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 24px", borderBottom: i < Math.min(obras.length, 6) - 1 ? `1px solid ${C.border}` : "none", transition: "background .15s", cursor: "default" }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.02)"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-            >
-              <div style={{ width: 50, height: 50, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: "rgba(255,255,255,0.05)" }}>
-                {obra.imagen_principal ? <img src={obra.imagen_principal} alt={obra.titulo} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><Palette size={18} color="rgba(255,255,255,0.15)" /></div>}
+          ) : obras.slice(0, 6).map((obra, i) => {
+            const badge = getBadge(obra.estado, obra.activa);
+            return (
+              <div key={obra.id_obra} style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 24px", borderBottom: i < Math.min(obras.length, 6) - 1 ? `1px solid ${C.border}` : "none", transition: "background .15s" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.02)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+              >
+                <div style={{ width: 50, height: 50, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: "rgba(255,255,255,0.05)" }}>
+                  {obra.imagen_principal
+                    ? <img src={obra.imagen_principal} alt={obra.titulo} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><Palette size={18} color="rgba(255,255,255,0.15)" /></div>
+                  }
+                </div>
+                <div style={{ flex: 1, overflow: "hidden" }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: 3 }}>{obra.titulo}</div>
+                  <div style={{ fontSize: 12, color: C.orange, fontWeight: 700 }}>
+                    {obra.precio_base ? `$${Number(obra.precio_base).toLocaleString("es-MX")} MXN` : "Sin precio"}
+                  </div>
+                </div>
+                {/* Badge inline */}
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 12px", borderRadius: 100, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3, color: badge.color, background: "rgba(8,6,18,0.82)", border: `1px solid ${badge.color}60`, textTransform: "uppercase", whiteSpace: "nowrap", backdropFilter: "blur(8px)" }}>
+                  {obra.estado === "publicada" && <CheckCircle size={10} />}
+                  {obra.estado === "pendiente" && <Clock size={10} />}
+                  {obra.estado === "rechazada" && <XCircle size={10} />}
+                  {badge.label}
+                </span>
               </div>
-              <div style={{ flex: 1, overflow: "hidden" }}>
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: 3 }}>{obra.titulo}</div>
-               <div style={{ fontSize: 12, color: C.orange, fontWeight: 700 }}>
-  {obra.precio_base ? `$${Number(obra.precio_base).toLocaleString("es-MX")} MXN` : "Sin precio"}
-</div>
-              </div>
-              <Badge estado={obra.estado} />
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -282,78 +311,154 @@ export default function ArtistaDashboard() {
     </div>
   );
 
+  // ── SECCIÓN OBRAS ✅ — ahora igual a MisObras.tsx ─────────────
   const SeccionObras = () => (
     <div style={{ animation: "fadeUp .5s ease both" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, flexWrap: "wrap", gap: 16 }}>
         <div>
-          <h2 style={{ fontSize: 26, fontWeight: 900, color: C.text, margin: "0 0 4px", fontFamily: "'Playfair Display', serif" }}>Mis obras</h2>
+          <p style={{ fontSize: 11, fontWeight: 800, color: C.orange, textTransform: "uppercase", letterSpacing: 1.5, margin: "0 0 6px" }}>✦ Portal del Artista</p>
+          <h2 style={{ fontSize: 30, fontWeight: 900, color: C.text, margin: "0 0 4px", fontFamily: "'Playfair Display', serif" }}>Mis obras</h2>
           <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>{obras.length} obra{obras.length !== 1 ? "s" : ""} registradas</p>
         </div>
-        <button onClick={() => navigate("/artista/nueva-obra")} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 22px", borderRadius: 12, background: `linear-gradient(135deg, ${C.orange}, ${C.pink})`, border: "none", color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: `0 6px 20px ${C.orange}35` }}>
+        <button onClick={() => navigate("/artista/nueva-obra")}
+          style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 22px", borderRadius: 12, background: `linear-gradient(135deg, ${C.orange}, ${C.pink})`, border: "none", color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: `0 6px 20px ${C.orange}35` }}>
           <Plus size={15} /> Nueva obra
         </button>
       </div>
 
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 24 }}>
+        {[
+          { label: "TOTAL OBRAS",  value: stats.total,      color: C.orange },
+          { label: "PUBLICADAS",   value: stats.publicadas, color: C.green  },
+          { label: "EN REVISIÓN",  value: stats.pendientes, color: C.gold   },
+          { label: "RECHAZADAS",   value: stats.rechazadas, color: C.pink   },
+        ].map((s, i) => (
+          <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: "18px 20px", position: "relative", overflow: "hidden" }}>
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: s.color }} />
+            <div style={{ fontSize: 30, fontWeight: 900, color: C.text, fontFamily: "'Playfair Display', serif", marginBottom: 4 }}>{s.value}</div>
+            <div style={{ fontSize: 10.5, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtros */}
       <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
         {[
-          { id: "todas", label: "Todas", count: stats.total },
-          { id: "publicada", label: "Publicadas", count: stats.publicadas },
+          { id: "todas",     label: "Todas",       count: stats.total      },
+          { id: "aprobada",  label: "Publicadas",  count: stats.publicadas },
           { id: "pendiente", label: "En revisión", count: stats.pendientes },
-          { id: "rechazada", label: "Rechazadas", count: stats.rechazadas },
+          { id: "rechazada", label: "Rechazadas",  count: stats.rechazadas },
         ].map(f => (
           <button key={f.id} onClick={() => setFiltro(f.id)}
             style={{ padding: "8px 18px", borderRadius: 100, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 7, background: filtro === f.id ? `linear-gradient(135deg, ${C.orange}30, ${C.pink}20)` : "rgba(255,255,255,0.04)", border: filtro === f.id ? `1px solid ${C.orange}50` : `1px solid ${C.border}`, color: filtro === f.id ? C.orange : C.muted, transition: "all .15s" }}>
             {f.label}
-            {f.count > 0 && <span style={{ background: filtro === f.id ? C.orange : "rgba(255,255,255,0.08)", borderRadius: 100, padding: "1px 8px", fontSize: 10.5, color: filtro === f.id ? "white" : C.muted, fontWeight: 800 }}>{f.count}</span>}
+            <span style={{ background: filtro === f.id ? C.orange : "rgba(255,255,255,0.08)", borderRadius: 100, padding: "1px 8px", fontSize: 10.5, color: filtro === f.id ? "white" : C.muted, fontWeight: 800 }}>{f.count}</span>
           </button>
         ))}
       </div>
 
+      {/* Grid — mismo diseño que MisObras.tsx */}
       {obrasFiltradas.length === 0 ? (
         <div style={{ textAlign: "center", padding: "80px 0", background: C.card, borderRadius: 20, border: `1px solid ${C.border}` }}>
-          <Image size={32} color="rgba(255,255,255,0.1)" style={{ marginBottom: 16 }} />
-          <p style={{ fontSize: 14, color: C.muted }}>No hay obras en esta categoría</p>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🎨</div>
+          <h3 style={{ fontSize: 16, color: C.text, margin: "0 0 8px", fontFamily: "'Playfair Display', serif" }}>
+            {filtro === "todas" ? "Aún no tienes obras" : "No hay obras en esta categoría"}
+          </h3>
+          <p style={{ fontSize: 13, color: C.muted, margin: "0 0 20px" }}>
+            {filtro === "todas" ? "¡Sube tu primera obra y empieza a vender!" : "Cambia el filtro para ver otras obras"}
+          </p>
+          {filtro === "todas" && (
+            <button onClick={() => navigate("/artista/nueva-obra")} style={{ padding: "10px 24px", borderRadius: 10, background: `linear-gradient(135deg, ${C.orange}, ${C.pink})`, border: "none", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              + Subir primera obra
+            </button>
+          )}
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 16 }}>
-          {obrasFiltradas.map((obra, i) => (
-            <div key={obra.id_obra} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 18, overflow: "hidden", animation: `fadeUp .4s ease ${i * 0.06}s both`, transition: "transform .22s, box-shadow .22s, border-color .22s" }}
-              onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.transform = "translateY(-5px)"; el.style.boxShadow = "0 20px 48px rgba(0,0,0,0.4)"; el.style.borderColor = `${C.orange}30`; }}
-              onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.transform = "none"; el.style.boxShadow = "none"; el.style.borderColor = C.border; }}
-            >
-              <div style={{ height: 175, background: "rgba(255,255,255,0.04)", position: "relative", overflow: "hidden" }}>
-                {obra.imagen_principal
-                  ? <img src={obra.imagen_principal} alt={obra.titulo} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 6 }}><Palette size={30} color="rgba(255,255,255,0.1)" /><span style={{ fontSize: 10, color: "rgba(255,255,255,0.15)" }}>Sin imagen</span></div>
-                }
-              <div style={{ position: "absolute", bottom: 10, left: 10 }}><Badge estado={obra.estado} /></div>
-              </div>
-              <div style={{ padding: "16px" }}>
-                <h4 style={{ fontSize: 14, fontWeight: 800, color: C.text, margin: "0 0 2px", fontFamily: "'Playfair Display', serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{obra.titulo}</h4>
-                {obra.categoria && <p style={{ fontSize: 10.5, color: C.muted, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 600 }}>{obra.categoria}</p>}
-
-<p style={{ fontSize: 16, color: C.orange, fontWeight: 900, margin: "0 0 14px", fontFamily: "'Playfair Display', serif" }}>
-  {obra.precio_base ? `$${Number(obra.precio_base).toLocaleString("es-MX")}` : "—"}
-  <span style={{ fontSize: 10, fontWeight: 600, color: C.muted }}> MXN</span>
-</p>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button style={{ flex: 1, padding: "8px", borderRadius: 9, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.muted, fontSize: 12, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, fontWeight: 600 }}>
-                    <Edit3 size={13} /> Editar
-                  </button>
-                  {obra.slug && (
-                    <button onClick={() => navigate(`/obras/${obra.slug}`)} style={{ padding: "8px 12px", borderRadius: 9, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.muted, cursor: "pointer", display: "flex", alignItems: "center" }}>
-                      <Eye size={14} />
-                    </button>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 18 }}>
+          {obrasFiltradas.map((obra) => {
+            const badge = getBadge(obra.estado, obra.activa);
+            return (
+              <div key={obra.id_obra}
+                style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 18, overflow: "hidden", transition: "transform .22s, box-shadow .22s, border-color .22s" }}
+                onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.transform = "translateY(-5px)"; el.style.boxShadow = "0 20px 48px rgba(0,0,0,0.4)"; el.style.borderColor = `${C.orange}30`; }}
+                onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.transform = "none"; el.style.boxShadow = "none"; el.style.borderColor = C.border; }}
+              >
+                {/* Imagen */}
+                <div style={{ height: 180, background: "rgba(255,255,255,0.04)", position: "relative", overflow: "hidden" }}>
+                  {obra.imagen_principal
+                    ? <img src={obra.imagen_principal} alt={obra.titulo} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36 }}>🖼️</div>
+                  }
+                  {/* ✅ Badge con position absolute + inline styles */}
+                  <span style={{ position: "absolute", bottom: 10, left: 10, display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 12px", borderRadius: 100, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.5, color: badge.color, background: "rgba(8,6,18,0.85)", border: `1px solid ${badge.color}60`, backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", textTransform: "uppercase", whiteSpace: "nowrap", boxShadow: "0 2px 12px rgba(0,0,0,0.5)" }}>
+                    {badge.label}
+                  </span>
+                  {obra.destacada && (
+                    <span style={{ position: "absolute", top: 10, right: 10, background: `${C.gold}20`, border: `1px solid ${C.gold}50`, color: C.gold, fontSize: 10.5, fontWeight: 800, padding: "3px 10px", borderRadius: 100 }}>⭐ Destacada</span>
                   )}
                 </div>
+
+                {/* Cuerpo */}
+                <div style={{ padding: "16px" }}>
+                  <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+                    {obra.categoria && <span style={{ fontSize: 10.5, fontWeight: 700, color: C.orange, background: `${C.orange}12`, border: `1px solid ${C.orange}25`, padding: "2px 8px", borderRadius: 100 }}>{obra.categoria}</span>}
+                    {obra.tecnica   && <span style={{ fontSize: 10.5, fontWeight: 700, color: C.muted,  background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, padding: "2px 8px", borderRadius: 100 }}>{obra.tecnica}</span>}
+                  </div>
+
+                  <h4 style={{ fontSize: 14.5, fontWeight: 800, color: C.text, margin: "0 0 6px", fontFamily: "'Playfair Display', serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {obra.titulo}
+                  </h4>
+
+                  <p style={{ fontSize: 16, color: C.orange, fontWeight: 900, margin: "0 0 10px", fontFamily: "'Playfair Display', serif" }}>
+                    {obra.precio_base ? formatPrecio(obra.precio_base) : "—"}
+                  </p>
+
+                  {obra.fecha_creacion && (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: C.muted, marginBottom: 10 }}>
+                      <span>👁 {obra.vistas || 0} vistas</span>
+                      <span>📅 {formatFecha(obra.fecha_creacion)}</span>
+                    </div>
+                  )}
+
+                  {obra.estado === "rechazada" && obra.motivo_rechazo && (
+                    <div style={{ background: `${C.pink}10`, border: `1px solid ${C.pink}25`, borderRadius: 8, padding: "8px 10px", marginBottom: 10, fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>
+                      <strong style={{ color: C.pink }}>Motivo: </strong>{obra.motivo_rechazo}
+                    </div>
+                  )}
+
+                  <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                    {obra.permite_marco   && <span style={{ fontSize: 10.5, color: C.muted }}>🖼 Enmarcable</span>}
+                    {obra.con_certificado && <span style={{ fontSize: 10.5, color: C.muted }}>📜 Certificado</span>}
+                  </div>
+
+                  {/* Botones */}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={() => navigate(`/artista/editar-obra/${obra.id_obra}`)}
+                      style={{ flex: 1, padding: "8px", borderRadius: 9, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.muted, fontSize: 12, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, fontWeight: 600, transition: "all .15s" }}
+                      onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.color = C.orange; el.style.borderColor = `${C.orange}40`; }}
+                      onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.color = C.muted; el.style.borderColor = C.border; }}>
+                      <Edit3 size={13} /> Editar
+                    </button>
+                    {obra.slug && (
+                      <button onClick={() => navigate(`/obras/${obra.slug}`)}
+                        style={{ padding: "8px 12px", borderRadius: 9, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.muted, cursor: "pointer", display: "flex", alignItems: "center" }}>
+                        <Eye size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
 
+  // ── SECCIÓN PERFIL ────────────────────────────────────────────
   const SeccionPerfil = () => (
     <div style={{ animation: "fadeUp .5s ease both", maxWidth: 680 }}>
       <h2 style={{ fontSize: 26, fontWeight: 900, color: C.text, margin: "0 0 24px", fontFamily: "'Playfair Display', serif" }}>Mi perfil</h2>
@@ -374,12 +479,12 @@ export default function ArtistaDashboard() {
             <p style={{ fontSize: 11, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1.5, margin: "0 0 20px" }}>Información</p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px 32px" }}>
               {[
-                { label: "Nombre completo", value: artista.nombre_completo },
+                { label: "Nombre completo",  value: artista.nombre_completo },
                 { label: "Nombre artístico", value: artista.nombre_artistico || "—" },
-                { label: "Correo", value: artista.correo || "—" },
-                { label: "Teléfono", value: artista.telefono || "—" },
-                { label: "Comisión", value: `${artista.porcentaje_comision}%` },
-                { label: "Matrícula", value: artista.matricula || "—" },
+                { label: "Correo",           value: artista.correo           || "—" },
+                { label: "Teléfono",         value: artista.telefono         || "—" },
+                { label: "Comisión",         value: `${artista.porcentaje_comision}%` },
+                { label: "Matrícula",        value: artista.matricula        || "—" },
               ].map((campo, i) => (
                 <div key={i}>
                   <p style={{ fontSize: 10.5, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1.2, margin: "0 0 5px" }}>{campo.label}</p>
@@ -399,6 +504,7 @@ export default function ArtistaDashboard() {
     </div>
   );
 
+  // ── ROOT RENDER ───────────────────────────────────────────────
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", display: "flex" }}>
       <div style={{ width: 260, flexShrink: 0 }} className="sidebar-desktop"><Sidebar /></div>
@@ -409,6 +515,7 @@ export default function ArtistaDashboard() {
       </>}
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        {/* Topbar mobile */}
         <div className="topbar-mobile" style={{ display: "none", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: `1px solid ${C.border}`, background: C.bg, position: "sticky", top: 0, zIndex: 40 }}>
           <button onClick={() => setSidebarOpen(true)} style={{ background: "none", border: "none", color: C.text, cursor: "pointer" }}><Menu size={22} /></button>
           <img src={logoImg} alt="Nu-B Studio" style={{ height: 30 }} />
@@ -427,8 +534,8 @@ export default function ArtistaDashboard() {
           ) : (
             <>
               {seccion === "dashboard" && <SeccionDashboard />}
-              {seccion === "obras" && <SeccionObras />}
-              {seccion === "perfil" && <SeccionPerfil />}
+              {seccion === "obras"     && <SeccionObras />}
+              {seccion === "perfil"    && <SeccionPerfil />}
             </>
           )}
         </main>
@@ -436,14 +543,14 @@ export default function ArtistaDashboard() {
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600;700;800&display=swap');
-        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-        @keyframes fadeUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes spin    { from{transform:rotate(0deg)}   to{transform:rotate(360deg)} }
+        @keyframes fadeUp  { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
         .sidebar-desktop { display: block; }
         @media (max-width: 900px) {
           .sidebar-desktop { display: none !important; }
-          .topbar-mobile { display: flex !important; }
-          .main-pad { padding: 20px !important; }
-          .dashboard-grid { grid-template-columns: 1fr !important; }
+          .topbar-mobile   { display: flex !important; }
+          .main-pad        { padding: 20px !important; }
+          .dashboard-grid  { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 640px) { .main-pad { padding: 16px !important; } }
       `}</style>

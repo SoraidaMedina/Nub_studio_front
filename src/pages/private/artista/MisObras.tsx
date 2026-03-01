@@ -1,9 +1,7 @@
 // src/pages/private/artista/MisObras.tsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-// ✅ Después:
 import { authService } from "../../../services/authService";
-import "../../../styles/mis-obras.css";
 
 interface Obra {
   id_obra: number;
@@ -12,7 +10,7 @@ interface Obra {
   descripcion: string;
   imagen_principal: string;
   precio_base: number;
-  estado: "pendiente" | "aprobada" | "rechazada";
+  estado: "pendiente" | "aprobada" | "rechazada" | "publicada";
   activa: boolean;
   visible: boolean;
   destacada: boolean;
@@ -30,40 +28,55 @@ interface Obra {
 interface Stats {
   total: number;
   publicadas: number;
-  en_revision: number;
+  pendientes: number;  // ✅ fix: era en_revision
   rechazadas: number;
 }
 
-type Filtro = "todas" | "pendiente" | "aprobada" | "rechazada";
+type Filtro = "todas" | "pendiente" | "aprobada" | "rechazada" | "publicada";
+
+const C = {
+  orange: "#FF840E", pink: "#CC59AD", purple: "#8D4CCD",
+  gold: "#FFC110", bg: "#080612", panel: "#0d0b1a",
+  card: "rgba(255,255,255,0.028)", border: "rgba(255,255,255,0.07)",
+  text: "#f5f0ff", muted: "rgba(245,240,255,0.45)",
+  green: "#3DDB85",
+};
+
+const FB = "'DM Sans', sans-serif";
 
 export default function MisObras() {
   const navigate = useNavigate();
-  const [obras, setObras] = useState<Obra[]>([]);
-  const [stats, setStats] = useState<Stats>({ total: 0, publicadas: 0, en_revision: 0, rechazadas: 0 });
+  const [obras,   setObras]   = useState<Obra[]>([]);
+  const [stats,   setStats]   = useState<Stats>({ total: 0, publicadas: 0, pendientes: 0, rechazadas: 0 });
   const [loading, setLoading] = useState(true);
-  const [filtro, setFiltro] = useState<Filtro>("todas");
+  const [filtro,  setFiltro]  = useState<Filtro>("todas");
   const [artista, setArtista] = useState<{ nombre_completo?: string; nombre_artistico?: string }>({});
 
   const API = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
-  useEffect(() => {
-    cargarDatos();
-  }, []);
+  useEffect(() => { cargarDatos(); }, []);
 
   const cargarDatos = async () => {
     try {
-      const token = authService.getToken();
+      const token   = authService.getToken();
       const headers = { Authorization: `Bearer ${token}` };
 
       const [obrasRes, perfilRes] = await Promise.all([
         fetch(`${API}/api/artista-portal/mis-obras`, { headers }),
-        fetch(`${API}/api/artista-portal/mi-perfil`, { headers }),
+        fetch(`${API}/api/artista-portal/mi-perfil`,  { headers }),
       ]);
 
       if (obrasRes.ok) {
         const data = await obrasRes.json();
         setObras(data.obras || []);
-        setStats(data.stats || { total: 0, publicadas: 0, en_revision: 0, rechazadas: 0 });
+        // ✅ fix: compatible con stats.pendientes y stats.en_revision
+        const s = data.stats || {};
+        setStats({
+          total:      s.total      || 0,
+          publicadas: s.publicadas || 0,
+          pendientes: s.pendientes ?? s.en_revision ?? 0,
+          rechazadas: s.rechazadas || 0,
+        });
       }
 
       if (perfilRes.ok) {
@@ -79,12 +92,14 @@ export default function MisObras() {
 
   const obrasFiltradas = filtro === "todas" ? obras : obras.filter(o => o.estado === filtro);
 
-  const estadoBadge = (estado: string, activa: boolean) => {
-    if (estado === "aprobada" && activa) return { label: "Publicada", cls: "badge--verde" };
-    if (estado === "aprobada" && !activa) return { label: "Inactiva", cls: "badge--gris" };
-    if (estado === "pendiente") return { label: "En revisión", cls: "badge--amarillo" };
-    if (estado === "rechazada") return { label: "Rechazada", cls: "badge--rojo" };
-    return { label: estado, cls: "badge--gris" };
+  // ✅ fix: badge como función con color inline (sin depender de clases CSS)
+  const getBadge = (estado: string, activa: boolean) => {
+    if (estado === "aprobada"  && activa)  return { label: "Publicada",   color: C.green };
+    if (estado === "aprobada"  && !activa) return { label: "Inactiva",    color: C.muted };
+    if (estado === "publicada")            return { label: "Publicada",   color: C.green };
+    if (estado === "pendiente")            return { label: "En revisión", color: C.gold  };
+    if (estado === "rechazada")            return { label: "Rechazada",   color: C.pink  };
+    return { label: estado, color: C.muted };
   };
 
   const formatPrecio = (n: number) =>
@@ -93,168 +108,237 @@ export default function MisObras() {
   const formatFecha = (f: string) =>
     new Date(f).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
 
+  const inicial = (artista.nombre_artistico || artista.nombre_completo || "A")[0].toUpperCase();
+
+  // ── LOADING ───────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="mo-layout">
-        <div className="mo-sidebar">
-          <div className="mo-logo">NU·B</div>
-          <div className="mo-skeleton-sidebar" />
-        </div>
-        <div className="mo-main">
-          <div className="mo-loading">
-            <div className="mo-spinner" />
-            <p>Cargando tus obras...</p>
+      <div style={{ minHeight: "100vh", background: C.bg, display: "flex" }}>
+        <aside style={sidebarStyle}>
+          <div style={logoStyle}>NU·B</div>
+        </aside>
+        <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ width: 48, height: 48, margin: "0 auto 16px", borderRadius: "50%", border: `3px solid transparent`, borderTopColor: C.orange, animation: "spin .8s linear infinite" }} />
+            <p style={{ color: C.muted, fontSize: 14, fontFamily: FB }}>Cargando tus obras...</p>
           </div>
-        </div>
+        </main>
+        <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
       </div>
     );
   }
 
+  // ── RENDER ────────────────────────────────────────────────────
   return (
-    <div className="mo-layout">
-      {/* ── SIDEBAR ── */}
-      <aside className="mo-sidebar">
-        <div className="mo-logo" onClick={() => navigate("/artista/dashboard")}>NU·B</div>
+    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", fontFamily: FB }}>
 
-        <div className="mo-artista-card">
-          <div className="mo-avatar">
-            {(artista.nombre_artistico || artista.nombre_completo || "A")[0].toUpperCase()}
-          </div>
-          <div>
-            <div className="mo-artista-nombre">{artista.nombre_artistico || artista.nombre_completo}</div>
-            <div className="mo-artista-badge">Artista activo</div>
+      {/* ── SIDEBAR ── */}
+      <aside style={sidebarStyle}>
+        <div style={logoStyle} onClick={() => navigate("/artista/dashboard")}>NU·B</div>
+
+        {/* User card */}
+        <div style={{ padding: "0 16px 20px", borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ background: `linear-gradient(135deg, ${C.orange}18, ${C.pink}10)`, border: `1px solid ${C.orange}25`, borderRadius: 14, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: "50%", background: `linear-gradient(135deg, ${C.orange}, ${C.pink})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 900, color: "white", flexShrink: 0 }}>{inicial}</div>
+            <div style={{ overflow: "hidden" }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {artista.nombre_artistico || artista.nombre_completo}
+              </div>
+              <div style={{ fontSize: 11, color: C.muted, display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.green }} /> Artista activo
+              </div>
+            </div>
           </div>
         </div>
 
-        <nav className="mo-nav">
-          <p className="mo-nav-label">NAVEGACIÓN</p>
-          <button className="mo-nav-item" onClick={() => navigate("/artista/dashboard")}>
-            <span className="mo-nav-icon">⊞</span> Overview
-          </button>
-          <button className="mo-nav-item mo-nav-item--active">
-            <span className="mo-nav-icon">⊠</span> Mis obras
-          </button>
-          <button className="mo-nav-item" onClick={() => navigate("/artista/perfil")}>
-            <span className="mo-nav-icon">◯</span> Mi perfil
-          </button>
+        {/* Nav links */}
+        <nav style={{ flex: 1, padding: "16px" }}>
+          <p style={{ fontSize: 10, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>Navegación</p>
+          {[
+            { label: "Overview",  path: "/artista/dashboard", active: false },
+            { label: "Mis obras", path: "/artista/mis-obras",  active: true  },
+            { label: "Mi perfil", path: "/artista/perfil",     active: false },
+          ].map(item => (
+            <button key={item.path} onClick={() => navigate(item.path)}
+              style={{ display: "flex", alignItems: "center", width: "100%", padding: "11px 14px", borderRadius: 10, marginBottom: 3, background: item.active ? `linear-gradient(135deg, ${C.orange}22, ${C.pink}12)` : "transparent", border: item.active ? `1px solid ${C.orange}35` : "1px solid transparent", color: item.active ? C.orange : C.muted, fontSize: 13.5, fontWeight: item.active ? 700 : 500, cursor: "pointer", fontFamily: FB, textAlign: "left", transition: "all .15s" }}>
+              {item.label}
+            </button>
+          ))}
         </nav>
 
-        <button className="mo-btn-nueva" onClick={() => navigate("/artista/nueva-obra")}>
-          + Subir nueva obra
-        </button>
-
-        <button className="mo-cerrar" onClick={() => { authService.logout(); navigate("/login"); }}>
-          ↩ Cerrar sesión
-        </button>
+        {/* Botones inferiores */}
+        <div style={{ padding: "16px", borderTop: `1px solid ${C.border}` }}>
+          <button onClick={() => navigate("/artista/nueva-obra")}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "11px", borderRadius: 10, background: `linear-gradient(135deg, ${C.orange}, ${C.pink})`, border: "none", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FB, marginBottom: 8, boxShadow: `0 4px 14px ${C.orange}30` }}>
+            + Subir nueva obra
+          </button>
+          <button onClick={() => { authService.logout(); navigate("/login"); }}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "9px", borderRadius: 10, background: "transparent", border: `1px solid ${C.border}`, color: C.muted, fontSize: 12.5, fontWeight: 500, cursor: "pointer", fontFamily: FB }}>
+            ↩ Cerrar sesión
+          </button>
+        </div>
       </aside>
 
-      {/* ── CONTENIDO ── */}
-      <main className="mo-main">
+      {/* ── MAIN ── */}
+      <main style={{ flex: 1, padding: "36px 40px", overflowY: "auto" }}>
+
         {/* Header */}
-        <div className="mo-header">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, flexWrap: "wrap", gap: 16 }}>
           <div>
-            <p className="mo-header-sub">✦ PORTAL DEL ARTISTA</p>
-            <h1 className="mo-header-titulo">Mis Obras</h1>
-            <p className="mo-header-desc">{stats.total} obra{stats.total !== 1 ? "s" : ""} en total</p>
+            <p style={{ fontSize: 11, fontWeight: 800, color: C.orange, textTransform: "uppercase", letterSpacing: 1.5, margin: "0 0 6px" }}>✦ Portal del Artista</p>
+            <h1 style={{ fontSize: 32, fontWeight: 900, color: C.text, margin: "0 0 4px", fontFamily: "'Playfair Display', serif" }}>Mis Obras</h1>
+            <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>{stats.total} obra{stats.total !== 1 ? "s" : ""} en total</p>
           </div>
-          <button className="mo-btn-primary" onClick={() => navigate("/artista/nueva-obra")}>
+          <button onClick={() => navigate("/artista/nueva-obra")}
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 22px", borderRadius: 12, background: `linear-gradient(135deg, ${C.orange}, ${C.pink})`, border: "none", color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: FB, boxShadow: `0 6px 20px ${C.orange}35` }}>
             + Nueva obra
           </button>
         </div>
 
         {/* Stats */}
-        <div className="mo-stats">
-          <div className="mo-stat-card mo-stat-card--naranja">
-            <div className="mo-stat-icon">⊞</div>
-            <div className="mo-stat-num">{stats.total}</div>
-            <div className="mo-stat-label">TOTAL OBRAS</div>
-          </div>
-          <div className="mo-stat-card mo-stat-card--verde">
-            <div className="mo-stat-icon">✓</div>
-            <div className="mo-stat-num">{stats.publicadas}</div>
-            <div className="mo-stat-label">PUBLICADAS</div>
-          </div>
-          <div className="mo-stat-card mo-stat-card--amarillo">
-            <div className="mo-stat-icon">◷</div>
-            <div className="mo-stat-num">{stats.en_revision}</div>
-            <div className="mo-stat-label">EN REVISIÓN</div>
-          </div>
-          <div className="mo-stat-card mo-stat-card--rojo">
-            <div className="mo-stat-icon">✕</div>
-            <div className="mo-stat-num">{stats.rechazadas}</div>
-            <div className="mo-stat-label">RECHAZADAS</div>
-          </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 28 }}>
+          {[
+            { label: "TOTAL OBRAS",  value: stats.total,      color: C.orange },
+            { label: "PUBLICADAS",   value: stats.publicadas, color: C.green  },
+            { label: "EN REVISIÓN",  value: stats.pendientes, color: C.gold   },  // ✅ fix
+            { label: "RECHAZADAS",   value: stats.rechazadas, color: C.pink   },
+          ].map((s, i) => (
+            <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: "20px", position: "relative", overflow: "hidden" }}>
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: s.color }} />
+              <div style={{ fontSize: 32, fontWeight: 900, color: C.text, fontFamily: "'Playfair Display', serif", marginBottom: 4 }}>{s.value}</div>
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: 1 }}>{s.label}</div>
+            </div>
+          ))}
         </div>
 
         {/* Filtros */}
-        <div className="mo-filtros">
-          {(["todas", "aprobada", "pendiente", "rechazada"] as Filtro[]).map(f => (
-            <button
-              key={f}
-              className={`mo-filtro ${filtro === f ? "mo-filtro--active" : ""}`}
-              onClick={() => setFiltro(f)}
-            >
-              {f === "todas" ? "Todas" : f === "aprobada" ? "Publicadas" : f === "pendiente" ? "En revisión" : "Rechazadas"}
+        <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
+          {([
+            { id: "todas",     label: "Todas",       count: stats.total      },
+            { id: "aprobada",  label: "Publicadas",  count: stats.publicadas },
+            { id: "pendiente", label: "En revisión", count: stats.pendientes },
+            { id: "rechazada", label: "Rechazadas",  count: stats.rechazadas },
+          ] as { id: Filtro; label: string; count: number }[]).map(f => (
+            <button key={f.id} onClick={() => setFiltro(f.id)}
+              style={{ padding: "8px 18px", borderRadius: 100, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: FB, display: "flex", alignItems: "center", gap: 7, background: filtro === f.id ? `linear-gradient(135deg, ${C.orange}30, ${C.pink}20)` : "rgba(255,255,255,0.04)", border: filtro === f.id ? `1px solid ${C.orange}50` : `1px solid ${C.border}`, color: filtro === f.id ? C.orange : C.muted, transition: "all .15s" }}>
+              {f.label}
+              <span style={{ background: filtro === f.id ? C.orange : "rgba(255,255,255,0.08)", borderRadius: 100, padding: "1px 8px", fontSize: 10.5, color: filtro === f.id ? "white" : C.muted, fontWeight: 800 }}>{f.count}</span>
             </button>
           ))}
         </div>
 
-        {/* Grid de obras */}
+        {/* Grid obras */}
         {obrasFiltradas.length === 0 ? (
-          <div className="mo-empty">
-            <div className="mo-empty-icon">🎨</div>
-            <h3>
-              {filtro === "todas" ? "Aún no tienes obras" : `No hay obras ${filtro === "aprobada" ? "publicadas" : filtro === "pendiente" ? "en revisión" : "rechazadas"}`}
+          <div style={{ textAlign: "center", padding: "80px 0", background: C.card, borderRadius: 20, border: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🎨</div>
+            <h3 style={{ fontSize: 16, color: C.text, margin: "0 0 8px", fontFamily: "'Playfair Display', serif" }}>
+              {filtro === "todas" ? "Aún no tienes obras" : "No hay obras en esta categoría"}
             </h3>
-            <p>
+            <p style={{ fontSize: 13, color: C.muted, margin: "0 0 20px" }}>
               {filtro === "todas" ? "¡Sube tu primera obra y empieza a vender!" : "Cambia el filtro para ver otras obras"}
             </p>
             {filtro === "todas" && (
-              <button className="mo-btn-primary" onClick={() => navigate("/artista/nueva-obra")}>
+              <button onClick={() => navigate("/artista/nueva-obra")}
+                style={{ padding: "10px 24px", borderRadius: 10, background: `linear-gradient(135deg, ${C.orange}, ${C.pink})`, border: "none", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FB }}>
                 + Subir primera obra
               </button>
             )}
           </div>
         ) : (
-          <div className="mo-grid">
-            {obrasFiltradas.map(obra => {
-              const badge = estadoBadge(obra.estado, obra.activa);
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 18 }}>
+            {obrasFiltradas.map((obra) => {
+              const badge = getBadge(obra.estado, obra.activa);
               return (
-                <div key={obra.id_obra} className="mo-card">
-                  <div className="mo-card-img-wrap">
-                    {obra.imagen_principal ? (
-                      <img src={obra.imagen_principal} alt={obra.titulo} className="mo-card-img" />
-                    ) : (
-                      <div className="mo-card-img-placeholder">🖼️</div>
+                <div key={obra.id_obra}
+                  style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 18, overflow: "hidden", transition: "transform .22s, box-shadow .22s, border-color .22s" }}
+                  onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.transform = "translateY(-5px)"; el.style.boxShadow = "0 20px 48px rgba(0,0,0,0.4)"; el.style.borderColor = `${C.orange}30`; }}
+                  onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.transform = "none"; el.style.boxShadow = "none"; el.style.borderColor = C.border; }}
+                >
+                  {/* Imagen */}
+                  <div style={{ height: 180, background: "rgba(255,255,255,0.04)", position: "relative", overflow: "hidden" }}>
+                    {obra.imagen_principal
+                      ? <img src={obra.imagen_principal} alt={obra.titulo} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36 }}>🖼️</div>
+                    }
+
+                    {/* ✅ fix badge: position absolute + estilos inline */}
+                    <span style={{
+                      position: "absolute", bottom: 10, left: 10,
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      padding: "4px 12px", borderRadius: 100,
+                      fontSize: 10.5, fontWeight: 800, letterSpacing: 0.5,
+                      color: badge.color,
+                      background: "rgba(8,6,18,0.85)",
+                      border: `1px solid ${badge.color}60`,
+                      backdropFilter: "blur(8px)",
+                      WebkitBackdropFilter: "blur(8px)",
+                      textTransform: "uppercase", whiteSpace: "nowrap",
+                      boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
+                    }}>
+                      {badge.label}
+                    </span>
+
+                    {obra.destacada && (
+                      <span style={{ position: "absolute", top: 10, right: 10, background: `${C.gold}20`, border: `1px solid ${C.gold}50`, color: C.gold, fontSize: 10.5, fontWeight: 800, padding: "3px 10px", borderRadius: 100 }}>
+                        ⭐ Destacada
+                      </span>
                     )}
-                    <span className={`mo-badge ${badge.cls}`}>{badge.label}</span>
-                    {obra.destacada && <span className="mo-badge-destacada">⭐ Destacada</span>}
                   </div>
 
-                  <div className="mo-card-body">
-                    <div className="mo-card-meta">
-                      {obra.categoria && <span className="mo-card-categoria">{obra.categoria}</span>}
-                      {obra.tecnica && <span className="mo-card-tecnica">{obra.tecnica}</span>}
+                  {/* Cuerpo */}
+                  <div style={{ padding: "16px" }}>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+                      {obra.categoria && (
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: C.orange, background: `${C.orange}12`, border: `1px solid ${C.orange}25`, padding: "2px 8px", borderRadius: 100 }}>
+                          {obra.categoria}
+                        </span>
+                      )}
+                      {obra.tecnica && (
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: C.muted, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, padding: "2px 8px", borderRadius: 100 }}>
+                          {obra.tecnica}
+                        </span>
+                      )}
                     </div>
 
-                    <h3 className="mo-card-titulo">{obra.titulo}</h3>
+                    <h3 style={{ fontSize: 14.5, fontWeight: 800, color: C.text, margin: "0 0 6px", fontFamily: "'Playfair Display', serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {obra.titulo}
+                    </h3>
 
-                    <div className="mo-card-precio">{formatPrecio(obra.precio_base)}</div>
+                    <p style={{ fontSize: 16, color: C.orange, fontWeight: 900, margin: "0 0 10px", fontFamily: "'Playfair Display', serif" }}>
+                      {formatPrecio(obra.precio_base)}
+                    </p>
 
-                    <div className="mo-card-info">
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: C.muted, marginBottom: 10 }}>
                       <span>👁 {obra.vistas || 0} vistas</span>
                       <span>📅 {formatFecha(obra.fecha_creacion)}</span>
                     </div>
 
                     {obra.estado === "rechazada" && obra.motivo_rechazo && (
-                      <div className="mo-card-rechazo">
-                        <strong>Motivo:</strong> {obra.motivo_rechazo}
+                      <div style={{ background: `${C.pink}10`, border: `1px solid ${C.pink}25`, borderRadius: 8, padding: "8px 10px", marginBottom: 10, fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>
+                        <strong style={{ color: C.pink }}>Motivo: </strong>{obra.motivo_rechazo}
                       </div>
                     )}
 
-                    <div className="mo-card-extras">
-                      {obra.permite_marco && <span className="mo-extra">🖼 Enmarcable</span>}
-                      {obra.con_certificado && <span className="mo-extra">📜 Certificado</span>}
+                    <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                      {obra.permite_marco   && <span style={{ fontSize: 10.5, color: C.muted }}>🖼 Enmarcable</span>}
+                      {obra.con_certificado && <span style={{ fontSize: 10.5, color: C.muted }}>📜 Certificado</span>}
+                    </div>
+
+                    {/* Botones */}
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={() => navigate(`/artista/editar-obra/${obra.id_obra}`)}
+                        style={{ flex: 1, padding: "8px", borderRadius: 9, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.muted, fontSize: 12, cursor: "pointer", fontFamily: FB, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, fontWeight: 600, transition: "all .15s" }}
+                        onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.color = C.orange; el.style.borderColor = `${C.orange}40`; }}
+                        onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.color = C.muted; el.style.borderColor = C.border; }}>
+                        ✏ Editar
+                      </button>
+                      {obra.slug && (
+                        <button onClick={() => navigate(`/obras/${obra.slug}`)}
+                          style={{ padding: "8px 12px", borderRadius: 9, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.muted, cursor: "pointer", display: "flex", alignItems: "center", fontSize: 14 }}>
+                          👁
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -263,6 +347,31 @@ export default function MisObras() {
           </div>
         )}
       </main>
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600;700;800&display=swap');
+        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        @media (max-width: 768px) {
+          aside { display: none !important; }
+          main  { padding: 20px !important; }
+        }
+      `}</style>
     </div>
   );
 }
+
+// ── Estilos base del sidebar ──────────────────────────────────
+const sidebarStyle: React.CSSProperties = {
+  width: 240, minHeight: "100vh",
+  background: "#0d0b1a",
+  borderRight: "1px solid rgba(255,255,255,0.07)",
+  display: "flex", flexDirection: "column", flexShrink: 0,
+  position: "sticky", top: 0, height: "100vh",
+};
+
+const logoStyle: React.CSSProperties = {
+  fontSize: 22, fontWeight: 900, color: "#FF840E",
+  fontFamily: "'DM Sans', sans-serif",
+  padding: "28px 24px 20px",
+  cursor: "pointer", letterSpacing: -0.5,
+};

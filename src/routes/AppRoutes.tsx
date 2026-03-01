@@ -17,6 +17,8 @@ import ArtistaDashboard from "../pages/private/artista/ArtistaDashboard";  // â†
 import RegistroArtista from "../pages/public/RegistroArtista";
 import NuevaObra from "../pages/private/artista/NuevaObra";
 import MisObras from "../pages/private/artista/MisObras";
+import EditarObraArtista from "../pages/private/artista/EditarObra"; 
+
 
 
 export default function AppRoutes() {
@@ -38,6 +40,9 @@ export default function AppRoutes() {
 } />
 <Route path="/artista/mis-obras" element={
   <ArtistaRoute><MisObras /></ArtistaRoute>
+} />
+<Route path="/artista/editar-obra/:id" element={
+  <ArtistaRoute><EditarObraArtista /></ArtistaRoute>
 } />
     
 
