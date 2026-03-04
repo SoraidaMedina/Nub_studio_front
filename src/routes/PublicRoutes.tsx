@@ -17,6 +17,8 @@ import ArtistaEnRevision from "../pages/public/ArtistaEnRevision"
 import ActivarCuenta   from "../pages/public/ActivarCuenta";
 import VerificarEmail  from "../pages/public/VerificarEmail";
 
+import ForgotPassword from "../pages/public/ForgotPassword";
+
 export default function PublicRoutes() {
   return (
     <Routes>
@@ -33,6 +35,7 @@ export default function PublicRoutes() {
        
       </Route>
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/register" element={<Register />} />  {/* ← AGREGAR */}
       <Route path="/two-factor-verify" element={<TwoFactorVerify />} />
       <Route path="/verify-email-code" element={<VerifyEmailCode />} />
