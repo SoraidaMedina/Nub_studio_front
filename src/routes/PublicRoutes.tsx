@@ -13,6 +13,9 @@ import Artistas from "../pages/public/Artistas";
 import DetalleArtistaPublico from "../pages/public/DetalleArtistaPublico";
 import Register from "../pages/public/Register";  // ← agregar import
 import ArtistaEnRevision from "../pages/public/ArtistaEnRevision"
+// Imports — arriba con los demás
+import ActivarCuenta   from "../pages/public/ActivarCuenta";
+import VerificarEmail  from "../pages/public/VerificarEmail";
 
 export default function PublicRoutes() {
   return (
@@ -33,6 +36,8 @@ export default function PublicRoutes() {
       <Route path="/register" element={<Register />} />  {/* ← AGREGAR */}
       <Route path="/two-factor-verify" element={<TwoFactorVerify />} />
       <Route path="/verify-email-code" element={<VerifyEmailCode />} />
+<Route path="/activar-cuenta"  element={<ActivarCuenta />} />
+<Route path="/verificar-email" element={<VerificarEmail />} />
        <Route path="/artista/pendiente" element={<ArtistaEnRevision />} />
     </Routes>
   );
